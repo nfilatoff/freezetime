@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from cs2lens.app import hlae
-from cs2lens.app.cs2 import INGAME, LOAD_WAIT, NO_CONSOLE, CS2Bridge, NoConsole, game_running, user_cvars
+from cs2lens.app.cs2 import INGAME, LOAD_WAIT, NO_CONSOLE, CS2Bridge, NoConsole, game_running, load_fresh, user_cvars
 from cs2lens.highlights import keep_ranges
 
 PREROLL = 1.0  # seconds before the clip window that are played (and cut) so the view settles
@@ -323,7 +323,7 @@ class Recorder:
                 # always load: a fresh demo has a known state (the demo panel open, whatever came before)
                 load = f"playdemo {playdemo}"
                 self._phase("loading")
-                con.load(load)
+                load_fresh(con, load)
                 if con.has_log:
                     con.wait_for(INGAME, LOAD_WAIT)
                 else:

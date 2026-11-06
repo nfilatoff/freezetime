@@ -13,6 +13,7 @@ def no_real_game(monkeypatch):
     def forbidden(*_args, **_kwargs):
         raise AssertionError("a test tried to send keys to the real game")
 
+    monkeypatch.setattr(cs2, "LEAVE_WAIT", 0)
     monkeypatch.setattr(cs2, "game_running", lambda: False)
     monkeypatch.setattr(recorder, "game_running", lambda: False)
     monkeypatch.setattr(hlae, "close_game", forbidden)

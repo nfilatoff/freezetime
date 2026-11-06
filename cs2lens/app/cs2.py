@@ -5,8 +5,9 @@ Current CS2 builds ignore ``-netconport``, so commands normally go through a key
 player types ``bind f13 "exec cs2lens_cmd"`` in the console (the game saves binds). To send
 commands the app writes them to ``cfg/cs2lens_cmd.cfg`` and presses F13 in the game window.
 Binds do not fire in the main menu, so loading a demo types ``exec cs2lens_cmd`` into the
-console instead. Input goes wherever the focus is: every key is sent only while the game
-window is in front. ``con_logfile`` is not available, so only a game started with
+console instead. Keys are window messages posted to the game: with the game in front Windows
+refuses SendInput (error 5), and nothing else tells the app so. They are still sent only while
+the game window is in front. ``con_logfile`` is not available, so only a game started with
 ``-condebug`` can confirm commands; otherwise the app uses measured waits. A network console,
 if the game opens one, is still preferred: both have ``send`` / ``load`` / ``wait_for``.
 
@@ -40,6 +41,10 @@ NO_ACK = "cs2_no_ack"  # the key was pressed but the game did not run the cfg
 NO_BIND = "cs2_no_bind"  # the bind is not in the game's saved keys
 NOT_FRONT = "cs2_not_front"  # the game window could not be brought to the front
 CMD_CFG = "cs2lens_cmd"
+WM_KEYDOWN, WM_KEYUP, WM_CHAR = 0x100, 0x101, 0x102
+SETTLE = ""  # in a command list: the commands after it need the effect of those before it
+SETTLE_WAIT = 0.4
+LEAVE_WAIT = 3.0  # seconds for the game to close a map or demo
 BIND_KEY = "f13"  # on no ordinary keyboard, so it can't clash with anything; no lock light either
 BIND_COMMAND = f'bind {BIND_KEY} "exec {CMD_CFG}"'
 BIND_SAVED = re.compile(r'"F13"\s+"exec cs2lens_cmd"', re.IGNORECASE)
@@ -108,6 +113,7 @@ def _user32():
     u = ctypes.WinDLL("user32", use_last_error=True)
     u.GetForegroundWindow.restype = wintypes.HWND
     u.SetForegroundWindow.argtypes = [wintypes.HWND]
+    u.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
     u.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
     u.IsIconic.argtypes = [wintypes.HWND]
     u.IsWindowVisible.argtypes = [wintypes.HWND]
@@ -133,7 +139,8 @@ def _game_window(u) -> int | None:
     return found[0] if found else None
 
 
-def _send_key(u, vk: int, scan: int, up: bool = False, unicode: bool = False) -> None:
+def _send_key(u, vk: int, scan: int, up: bool = False) -> None:
+    """A system-wide key press. Only for taking the focus: the game refuses SendInput while it is in front."""
     import ctypes
     from ctypes import wintypes
 
@@ -151,13 +158,18 @@ def _send_key(u, vk: int, scan: int, up: bool = False, unicode: bool = False) ->
     class INPUT(ctypes.Structure):
         _fields_ = [("type", wintypes.DWORD), ("u", UNION)]
 
-    event = INPUT(type=1, u=UNION(ki=KEYBDINPUT(wVk=vk, wScan=scan, dwFlags=(2 if up else 0) | (4 if unicode else 0))))  # 1: keyboard; 2: key up, 4: unicode
+    event = INPUT(type=1, u=UNION(ki=KEYBDINPUT(wVk=vk, wScan=scan, dwFlags=2 if up else 0)))  # 1: keyboard; 2: key up
     u.SendInput(1, ctypes.byref(event), ctypes.sizeof(INPUT))
 
 
-def _send_char(u, ch: str) -> None:
-    for up in (False, True):
-        _send_key(u, 0, ord(ch), up=up, unicode=True)
+def _post(u, hwnd: int, message: int, wparam: int, lparam: int) -> None:
+    """Hand one input message to the game window; a refused message is an error, not a silent success."""
+    if not u.PostMessageW(hwnd, message, wparam, lparam):
+        raise NoConsole(NOT_FRONT)
+
+
+def _send_char(u, hwnd: int, ch: str) -> None:
+    _post(u, hwnd, WM_CHAR, ord(ch), 1)
     time.sleep(0.01)
 
 
@@ -182,9 +194,10 @@ def _ensure_front(u) -> int:
 def _tap(u, hwnd: int, vk: int, scan: int) -> None:
     if u.GetForegroundWindow() != hwnd:  # the player switched away: stop typing into their other window
         raise NoConsole(NOT_FRONT)
-    _send_key(u, vk, scan)
+    lparam = 1 | (scan << 16)  # repeat count 1, then the scan code the game reads the key from
+    _post(u, hwnd, WM_KEYDOWN, vk, lparam)
     time.sleep(0.05)
-    _send_key(u, vk, scan, up=True)
+    _post(u, hwnd, WM_KEYUP, vk, lparam | (1 << 30) | (1 << 31))  # 30, 31: the key was down, is going up
     time.sleep(0.05)
 
 
@@ -205,7 +218,7 @@ def type_in_console(line: str) -> None:
     for ch in line:
         if u.GetForegroundWindow() != hwnd:
             raise NoConsole(NOT_FRONT)
-        _send_char(u, ch)
+        _send_char(u, hwnd, ch)
     time.sleep(0.1)
     _tap(u, hwnd, 0x0D, 0x1C)  # Enter
     time.sleep(0.3)
@@ -331,6 +344,28 @@ class KeyConsole:
 
     def close(self) -> None:
         pass
+
+
+def load_fresh(con, load: str) -> None:
+    """Leave whatever is open, then run ``load``: a demo loaded over an open demo can hang the game for good."""
+    con.load("disconnect")
+    time.sleep(LEAVE_WAIT)
+    con.load(load)
+
+
+def send_in_steps(con, commands: list[str]) -> None:
+    """Send ``commands``, waiting at each ``SETTLE`` for the game to apply what came before."""
+    step: list[str] = []
+    for command in commands:
+        if command != SETTLE:
+            step.append(command)
+            continue
+        if step:
+            con.send(*step)
+        step = []
+        time.sleep(SETTLE_WAIT)
+    if step:
+        con.send(*step)
 
 
 def steam_account() -> dict | None:
@@ -585,12 +620,12 @@ class CS2Bridge:
             try:
                 if reload or self.loaded != load or not con.has_log:  # blind: the player may have left it
                     self._phase(gen, "loading", "loading", f"CS2: {load}…", load=load)
-                    con.load(load)
-                    if not con.wait_for(INGAME, LOAD_WAIT):
+                    load_fresh(con, load)
+                    if not con.wait_for(INGAME, LOAD_WAIT) and con.has_log:  # blind: there is nothing to wait for
                         self._phase(gen, "loading", "load_timeout", "loading took too long, sending the commands anyway")
                     time.sleep(2.0)
                     self.loaded = load
-                con.send(*commands)
+                send_in_steps(con, commands)
                 self._phase(gen, "done", "done", f"in CS2: {label}", label=label)
             finally:
                 con.close()
@@ -615,7 +650,7 @@ class CS2Bridge:
                 con.wait_for(INGAME, LOAD_WAIT if isinstance(con, Netcon) else KEY_LOAD_WAIT)
                 time.sleep(2.0)
                 self.loaded = load
-                con.send(*commands)
+                send_in_steps(con, commands)
                 self._phase(gen, "done", "done", f"in CS2: {label}", label=label)
             except NoConsole as e:
                 self._phase(gen, "error", str(e).removeprefix("cs2_"), str(e))

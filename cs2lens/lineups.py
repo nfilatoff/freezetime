@@ -150,6 +150,8 @@ def _technique(m: Match, t: pl.DataFrame) -> pl.DataFrame:
 # ---- CS2 commands and configs ----
 
 GIVE = set(WEAPON_TYPE)
+GRENADE_SLOT = {"weapon_hegrenade": "slot6", "weapon_flashbang": "slot7", "weapon_smokegrenade": "slot8",
+                "weapon_decoy": "slot9", "weapon_molotov": "slot10", "weapon_incgrenade": "slot10"}
 MAP_RE = re.compile(r"^[a-z0-9_]{1,40}$")
 _UNSAFE = re.compile(r"[^A-Za-z0-9 _\-.,!?#+/()]")
 
@@ -167,7 +169,8 @@ def lineup_commands(lineup: dict) -> list[str]:
     """setpos / setang / give for one lineup (``x, y, z, pitch, yaw, weapon``)."""
     weapon = lineup["weapon"] if lineup.get("weapon") in GIVE else "weapon_smokegrenade"
     x, y, z, pitch, yaw = (float(lineup[k]) for k in ("x", "y", "z", "pitch", "yaw"))
-    return [f"setpos {x:.2f} {y:.2f} {z:.2f}", f"setang {pitch:.2f} {yaw:.2f} 0", f"give {weapon}", f"use {weapon}"]
+    # not "use": the game rejects it when a bound key runs the cfg
+    return [f"setpos {x:.2f} {y:.2f} {z:.2f}", f"setang {pitch:.2f} {yaw:.2f} 0", f"give {weapon}", GRENADE_SLOT[weapon]]
 
 
 def console_string(lineup: dict) -> str:
@@ -186,7 +189,8 @@ PRACTICE = [
     "mp_freezetime 0",
     "mp_buy_anywhere 1",
     "mp_buytime 9999",
-    "mp_warmup_end",
+    # stay in warmup: outside it, kicking the bots ends the round and the new one undoes the teleport
+    "mp_warmup_pausetimer 1",
     "bot_kick",
 ]
 

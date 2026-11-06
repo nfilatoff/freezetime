@@ -35,6 +35,7 @@ def test_record_session(tmp_path, monkeypatch):
     assert r.state["status"] == "done", r.state["error"]
     hide, restore = rec.overlay_commands({"spec_show_xray": "0"})
     assert 'spec_show_xray 0' in restore and "cl_draw_only_deathnotices 0" in restore  # the player's own value, else the default
+    assert received.pop(0) == "disconnect"  # a demo loaded over an open demo can hang the game
     assert received[0] == "playdemo m"
     assert received[1:3 + len(hide)] == ["demo_pause", "demoui", *hide]
     n = 3 + len(hide)

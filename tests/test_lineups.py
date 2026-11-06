@@ -68,7 +68,7 @@ def test_netcon_bridge(tmp_path):
             break
         time.sleep(0.05)
     srv.close()
-    assert received == ["map de_dust2", "setpos 1 2 3", "setpos 4 5 6"]  # the map is loaded only once
+    assert received == ["disconnect", "map de_dust2", "setpos 1 2 3", "setpos 4 5 6"]  # the map is loaded only once
 
 
 def test_steam_url():
@@ -186,6 +186,57 @@ def test_key_console_without_log(tmp_path, monkeypatch):
     con = KeyConsole(game, lambda: pressed.append(1), lambda _: None, has_log=False)
     con.send("x")
     assert pressed == [1] and con.wait_for(INGAME, 90) is False
+
+
+class _FakeUser32:
+    """Records the messages posted to the game window instead of touching the real one."""
+
+    def __init__(self, accept=True):
+        self.posted, self.accept = [], accept
+
+    def GetForegroundWindow(self):
+        return 7
+
+    def PostMessageW(self, *message):
+        self.posted.append(message)
+        return self.accept
+
+
+def test_keys_are_posted_to_the_game_window():
+    """The game refuses SendInput while it is in front, so keys go straight to its window."""
+    from cs2lens.app import cs2
+
+    u = _FakeUser32()
+    cs2._tap(u, 7, 0x7C, 0x64)  # the bound F13
+    cs2._send_char(u, 7, "e")
+    down, up, char = u.posted
+    assert down == (7, cs2.WM_KEYDOWN, 0x7C, 1 | (0x64 << 16))
+    assert up[:3] == (7, cs2.WM_KEYUP, 0x7C) and up[3] == down[3] | (3 << 30)
+    assert char == (7, cs2.WM_CHAR, ord("e"), 1)
+
+
+def test_commands_after_settle_go_in_a_later_press(monkeypatch):
+    from cs2lens.app import cs2
+
+    monkeypatch.setattr(cs2, "SETTLE_WAIT", 0)
+    sent = []
+
+    class Con:
+        def send(self, *commands):
+            sent.append(commands)
+
+    cs2.send_in_steps(Con(), ["setpos 1 2 3", "give weapon_decoy", cs2.SETTLE, "slot9", "echo x"])
+    assert sent == [("setpos 1 2 3", "give weapon_decoy"), ("slot9", "echo x")]
+    sent.clear()
+    cs2.send_in_steps(Con(), ["demo_gototick 5", cs2.SETTLE, cs2.SETTLE, "spec_player x"])  # a longer wait: no empty press
+    assert sent == [("demo_gototick 5",), ("spec_player x",)]
+
+
+def test_refused_key_is_an_error():
+    from cs2lens.app import cs2
+
+    with pytest.raises(NoConsole):
+        cs2._tap(_FakeUser32(accept=False), 7, 0x7C, 0x64)
 
 
 def test_tests_cannot_reach_the_game():

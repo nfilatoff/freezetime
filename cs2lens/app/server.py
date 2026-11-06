@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 
 from cs2lens.aggregate import aggregate
 from cs2lens.app.archives import is_archive, unpack
-from cs2lens.app.cs2 import BIND_COMMAND, CS2Bridge, NoConsole, game_running, steam_account
+from cs2lens.app.cs2 import BIND_COMMAND, SETTLE, CS2Bridge, NoConsole, game_running, steam_account
 from cs2lens.app import hlae
 from cs2lens.app.recorder import Clip, Recorder, find_ffmpeg, load_index, pick_encoder, save_index
 from cs2lens.app.jobs import JobQueue
@@ -867,7 +867,8 @@ def create_app(out: str | Path = "out") -> FastAPI:
         """Teleport the player in CS2 to a lineup (loading the map, launching CS2 if needed)."""
         map_name, lu = check_map(map), check_lineup(lineup)
         path = cs2.write_cfg("cs2lens_lineup", lineup_cfg(map_name, lu, lu["label"]))
-        commands = [c for c in PRACTICE if not c.startswith("//")] + lineup_commands(lu) + [f"echo cs2lens: {lu['label']}"]
+        *place, select = lineup_commands(lu)  # the grenade can be selected only once the server has given it
+        commands = [c for c in PRACTICE if not c.startswith("//")] + place + [SETTLE, select, f"echo cs2lens: {lu['label']}"]
         return cs2.run(f"map {map_name}", commands, lu["label"] or "lineup", reload) | {"cfg": str(path) if path else None}
 
     @api.post("/api/cs2/list")
@@ -901,8 +902,8 @@ def create_app(out: str | Path = "out") -> FastAPI:
     def cs2_demo(match_id: str = Body(...), tick: int = Body(...), player: str = Body("")) -> dict:
         """Open the match demo in CS2 a few seconds before ``tick``, watching ``player``."""
         commands = [f"demo_gototick {max(0, int(tick))}"]
-        if player:
-            commands.append(spec_player(player))
+        if player:  # the camera can follow a player only once the jump is over, and that takes up to seconds
+            commands += ["demo_pause", *[*[SETTLE] * 5, spec_player(player)] * 3, SETTLE, "demo_resume"]
         return cs2.run(f"playdemo {playable(match_id)}", commands, f"demo, tick {tick}")
 
     def playable(match_id: str) -> str:
