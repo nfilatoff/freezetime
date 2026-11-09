@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from functools import lru_cache
 from pathlib import Path
 
 import polars as pl
@@ -119,13 +120,39 @@ def round_context(m: Match) -> pl.DataFrame:
     )
 
 
+def _stamp(path: Path) -> tuple[int, int]:
+    st = path.stat()
+    return st.st_mtime_ns, st.st_size
+
+
+@lru_cache(maxsize=32)
+def _table(path: Path, _stamp: tuple[int, int]) -> pl.DataFrame:
+    return pl.read_parquet(path)
+
+
 def load_match(directory: str | Path, extra_tables: tuple[str, ...] = ()) -> Match:
+    """The match in an ``extract`` directory with the base tables plus ``extra_tables``.
+
+    The base tables and everything derived from them are computed once per directory (until its
+    files change); a match page asks for the same match from many endpoints at once.
+    """
     directory = Path(directory)
     names = [*BASE_TABLES, *extra_tables]
     missing = [t for t in names if not (directory / f"{t}.parquet").exists()]
     if missing:
         raise FileNotFoundError(f"{directory}: missing {missing}; run `cs2lens extract` first")
-    data = {t: pl.read_parquet(directory / f"{t}.parquet") for t in names}
+    files = (directory / "manifest.json", *(directory / f"{t}.parquet" for t in BASE_TABLES))
+    base = _base_match(directory.resolve(), tuple(_stamp(f) for f in files))
+    data = dict(base.data)  # a copy: callers may add tables of their own
+    for t in extra_tables:
+        path = directory / f"{t}.parquet"
+        data[t] = _table(path.resolve(), _stamp(path))
+    return replace(base, directory=directory, data=data)
+
+
+@lru_cache(maxsize=4)
+def _base_match(directory: Path, _stamps: tuple) -> Match:
+    data = {t: pl.read_parquet(directory / f"{t}.parquet") for t in BASE_TABLES}
     manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
     # Coaches have a stats row (no kills, deaths, assists or damage) and a pawn on their team.
     data["stats"] = data["stats"].filter(
