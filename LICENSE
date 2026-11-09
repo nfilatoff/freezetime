@@ -1,0 +1,84 @@
+Freezetime License
+Version 1.0
+
+Copyright (c) 2026 kanf1s. All rights reserved.
+
+This software, including its source code, frontend code, map configurations,
+documentation, images and every other file in this repository (together, the
+"Software"), is the property of the copyright holder named above (the "Author").
+The Software is source-available, not open source. It is licensed, not sold.
+
+1. Permitted use
+
+   Subject to the terms of this license, the Author grants you a personal,
+   non-exclusive, non-transferable, revocable permission to:
+
+   a) view and read the source code;
+   b) download or clone the unmodified Software from the Author's official
+      repository and install it on computers you control;
+   c) run the unmodified Software for non-commercial purposes, including to
+      analyse demos for yourself or for a team you play in, coach or analyse for.
+
+2. Restrictions
+
+   Unless the Author has given you prior written permission, you may not:
+
+   a) use the Software, or any part of it, for commercial purposes. Commercial
+      purposes include selling, renting or licensing the Software; offering it,
+      or any service built on it, for a fee or for other compensation (for
+      example as a hosted service, a paid analysis service or a subscription);
+      and including it in, or bundling it with, any commercial product or service;
+   b) modify, adapt, translate or create derivative works of the Software, or
+      incorporate any part of it into other software;
+   c) copy the Software, or any part of it, except as strictly necessary for
+      the use permitted in section 1;
+   d) distribute, publish, sublicense, share or otherwise make the Software, or
+      any part of it, available to third parties, whether modified or not and
+      whether free of charge or not;
+   e) remove, alter or obscure this license, the copyright notice or any other
+      notice of ownership in the Software;
+   f) use the name "Freezetime", the Author's name or the Software's logo to
+      endorse or promote any product or service.
+
+3. Permission from the Author
+
+   Any use not expressly permitted in section 1, including any use restricted
+   in section 2, requires the Author's prior written permission. To ask for it,
+   contact the Author through the official repository. A permission covers only
+   what it states and may come with its own conditions.
+
+4. Contributions
+
+   If you send the Author a suggestion, patch or other contribution, you grant
+   the Author a perpetual, worldwide, royalty-free, irrevocable right to use,
+   modify and distribute it as part of the Software under any terms. Sending a
+   contribution does not give you any rights in the Software.
+
+5. Third-party components
+
+   The Software depends on third-party libraries (for example awpy, polars,
+   FastAPI, React) that are distributed under their own licenses. This license
+   does not apply to those components and does not limit your rights under
+   their licenses. Game data, radar images and trademarks of Counter-Strike 2
+   belong to Valve Corporation; the Software is not affiliated with or endorsed
+   by Valve.
+
+6. Termination
+
+   Your permissions under this license end automatically if you break any of
+   its terms. When they end, you must stop using the Software and delete all
+   copies of it in your possession. The Author may also revoke the permission
+   in section 1 at any time by notice.
+
+7. Disclaimer of warranty
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
+
+8. Limitation of liability
+
+   IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE, INCLUDING ANY LOSS OF DATA, DEMOS OR GAME ACCOUNTS.

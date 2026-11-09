@@ -2,6 +2,8 @@
 name = "freezetime"
 version = "0.1.0"
 description = "CS2 demo analyzer built on awpy 3"
+license = "LicenseRef-Freezetime"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = ["awpy>=3.1", "polars", "matplotlib", "typer", "fastapi", "uvicorn", "zstandard; python_version < '3.14'"]
 
@@ -12,7 +14,7 @@ dev = ["pytest"]
 freezetime = "freezetime.cli:app"
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
