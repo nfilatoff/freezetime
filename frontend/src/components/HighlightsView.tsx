@@ -2,7 +2,7 @@
 // hand from a round window, previewed on the radar and downloaded as MP4/GIF, one by one or as a zip.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type Highlight, type MatchOverview, type Replay } from "../api";
-import { go } from "../App";
+import { go } from "../router";
 import { canEncodeVideo, download, exportGif, exportMp4, zipFiles } from "../clipExport";
 import { clockOf } from "../clipSummary";
 import {

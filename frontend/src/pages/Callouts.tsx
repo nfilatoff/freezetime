@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { go } from "../App";
+import { go } from "../router";
 import { drawCallouts, type CalloutMode } from "../callouts";
 import { CalloutModeSwitch } from "../components/CalloutToggle";
 import { mapPretty } from "../components/MatchPicker";

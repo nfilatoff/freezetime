@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type MovementFilter, type MultiroundPlayer, type RoundRef, type Row, type ScoutQuery, type ScoutReport, type ScoutTeam, type SimilarRound, type Strat, type Teams } from "../api";
-import { go, hashQuery } from "../App";
+import { go, hashQuery } from "../router";
 import { drawCallouts, useCalloutMode } from "../callouts";
 import { CalloutToggle } from "../components/CalloutToggle";
 import { ClipView } from "../components/ClipView";

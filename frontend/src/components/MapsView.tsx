@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type MatchOverview, type Movement, type MovementFilter, type Points, type Row } from "../api";
-import { go } from "../App";
+import { go } from "../router";
 import { drawCallouts, useCalloutMode } from "../callouts";
 import { GRID, PALETTES, add, drawHeat, newGrid, type HeatOptions } from "../heat";
 import { drawRadar, levelLabel, levelOf, sideShort, useMapAssets, worldToPx, type MapAssets } from "../radar";

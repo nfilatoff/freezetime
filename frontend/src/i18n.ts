@@ -93,3 +93,6 @@ export function td(key: string, fallback: string, params?: Params): string {
   const e = (DICTS[current] as Record<string, Entry>)[key] ?? (en as Record<string, Entry>)[key];
   return e === undefined ? fallback : format(e, params);
 }
+
+/** How a round ended, in the current language (the demo's raw reason when it has no translation). */
+export const reasonLabel = (reason: string) => td(`reason.${reason}`, reason);

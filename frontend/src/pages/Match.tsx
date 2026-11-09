@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, radarUrl, type MatchOverview, type ScoutTeam, type TacticsResult, type TimelineRound } from "../api";
-import { go } from "../App";
+import { go } from "../router";
 import { DataTable } from "../components/DataTable";
 import { ReplayView } from "../components/Replay";
 import { MapsView } from "../components/MapsView";
@@ -9,7 +9,7 @@ import { LineupsView } from "../components/LineupsView";
 import { HighlightsView } from "../components/HighlightsView";
 import { InsightCards } from "../components/InsightCards";
 import { sideColor, sideShort } from "../radar";
-import { t, td, type Key } from "../i18n";
+import { reasonLabel, t, type Key } from "../i18n";
 
 // A match is for going through one game; what spans games lives on the scout page.
 const TABS: [string, Key][] = [
@@ -26,7 +26,6 @@ const MORE_TABS: [string, Key][] = [
 ];
 
 /** How a round ended, in words. */
-export const reasonLabel = (reason: string) => td(`reason.${reason}`, reason);
 const REASON_ICON: Record<string, string> = { target_bombed: "💥", bomb_defused: "✂", target_saved: "⏱" };
 
 const scoreClass = (mine: number, other: number) => (mine > other ? "win" : mine < other ? "lose" : "");

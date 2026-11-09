@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, radarUrl, type Job, type Library, type LibraryMatch } from "../api";
-import { go } from "../App";
+import { go } from "../router";
 import { t } from "../i18n";
 
 const ACCEPT = ".dem,.zip,.rar,.7z,.tar,.tgz,.gz,.bz2,.xz,.zst";

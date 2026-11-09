@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MatchOverview, Replay } from "../api";
-import { go } from "../App";
-import { reasonLabel } from "../pages/Match";
+import { go } from "../router";
 import { CT_COLOR, RADAR_SIZE, T_COLOR, levelLabel, levelOf, panelLevels, sideColor, sideShort, useMapAssets, worldToPx } from "../radar";
 import {
   BOMB_TIME, NADE_COLORS, ROUND_TIME, bombState, drawRound, fmtClock, frameAt, killAt, loadReplay, playerStates, weaponName, type PlayerState,
 } from "../replayDraw";
 import { useCalloutMode } from "../callouts";
-import { t } from "../i18n";
+import { reasonLabel, t } from "../i18n";
 import { CalloutToggle } from "./CalloutToggle";
 import { KillCard } from "./KillCard";
 

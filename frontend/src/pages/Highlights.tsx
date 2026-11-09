@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type LibraryMatch, type MatchOverview } from "../api";
-import { go } from "../App";
+import { go } from "../router";
 import { HighlightsView } from "../components/HighlightsView";
 import { mapPretty } from "../components/MatchPicker";
 import { t } from "../i18n";

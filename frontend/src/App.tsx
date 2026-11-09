@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
+import { hashParts } from "./router";
 import { LibraryPage } from "./pages/Library";
 import { MatchPage } from "./pages/Match";
 import { AggregatePage } from "./pages/Aggregate";
@@ -11,25 +12,15 @@ import { LineupsView } from "./components/LineupsView";
 import { IconLibrary, IconLogo, IconMap, IconScout, IconStar, IconUs } from "./components/Icons";
 import { LANGS, detectSystemLang, setLang, t, useLang, type Key, type Lang } from "./i18n";
 
-// Hash routes: #/ (library), #/match/<id>/<tab>[/<round>[/<seconds after freeze end>]], #/aggregate, #/clip, #/lineups,
-// #/highlights[/<id>], #/callouts[/<map>], #/scout[/<team>[/<map>[/<tab>]]][?last=&side=&buy=&rounds=]
 function useHash(): string[] {
-  const read = () => window.location.hash.split("?")[0].replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
-  const [parts, setParts] = useState(read);
+  const [parts, setParts] = useState(hashParts);
   useEffect(() => {
-    const on = () => setParts(read());
+    const on = () => setParts(hashParts());
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
   }, []);
   return parts;
 }
-
-/** The ?a=b part of the hash route. */
-export const hashQuery = () => new URLSearchParams(window.location.hash.split("?")[1] ?? "");
-
-export const go = (...parts: (string | number)[]) => {
-  window.location.hash = "#/" + parts.map((p) => encodeURIComponent(String(p))).join("/");
-};
 
 export function App() {
   const [page, ...rest] = useHash();
