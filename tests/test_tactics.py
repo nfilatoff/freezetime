@@ -4,7 +4,7 @@ import warnings
 import polars as pl
 import pytest
 
-from cs2lens.tactics import tactics
+from freezetime.tactics import tactics
 
 
 def test_tactics_with_config(dust2_mini):

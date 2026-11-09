@@ -2,8 +2,8 @@ import gzip
 import json
 import shutil
 
-from cs2lens.context import load_match
-from cs2lens.replay import build_round, round_payload
+from freezetime.context import load_match
+from freezetime.replay import build_round, round_payload
 
 
 def test_round_document(dust2_mini):

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import polars as pl
 
-from cs2lens.context import Match, load_match, with_round
+from freezetime.context import Match, load_match, with_round
 
 LEAD_SEC = 3.0  # clip starts this long before the first kill
 TAIL_SEC = 2.0  # and ends this long after the last one

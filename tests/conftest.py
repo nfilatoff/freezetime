@@ -8,7 +8,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 @pytest.fixture(autouse=True)
 def no_real_game(monkeypatch):
     """Tests never touch a CS2 that happens to be running on this computer: no keys, no focus."""
-    from cs2lens.app import cs2, hlae, recorder
+    from freezetime.app import cs2, hlae, recorder
 
     def forbidden(*_args, **_kwargs):
         raise AssertionError("a test tried to send keys to the real game")

@@ -1,4 +1,4 @@
-// Callout of a world position from the map config polygons, the same rules as cs2lens/maps:
+// Callout of a world position from the map config polygons, the same rules as freezetime/maps:
 // polygons of the point's level only, the smaller zone wins where zones overlap, and a
 // point up to SNAP units outside every zone belongs to the nearest one.
 import type { MapMeta } from "./api";

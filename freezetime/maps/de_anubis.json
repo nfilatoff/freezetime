@@ -1,6 +1,6 @@
 {
   "map": "de_anubis",
-  "source": "derived by `cs2lens maps derive` from 2 demo(s): nav place names (m_szLastPlaceName) and T bomb-zone flags (m_bInBombZone), 32-unit cells",
+  "source": "derived by `freezetime maps derive` from 2 demo(s): nav place names (m_szLastPlaceName) and T bomb-zone flags (m_bInBombZone), 32-unit cells",
   "levels": [
     {"name": "default", "z_min": -1000000000.0, "z_max": 1000000000.0, "radar": "de_anubis"}
   ],

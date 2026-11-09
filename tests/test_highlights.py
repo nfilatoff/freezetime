@@ -2,7 +2,7 @@ import shutil
 
 import pytest
 
-from cs2lens.highlights import add_custom, delete_custom, highlights, load_custom
+from freezetime.highlights import add_custom, delete_custom, highlights, load_custom
 
 
 def test_auto_highlights(dust2_mini):

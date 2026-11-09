@@ -46,7 +46,7 @@ export function App() {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <a className="logo" href="#/" title="cs2lens">
+        <a className="logo" href="#/" title="Freezetime">
           <IconLogo />
         </a>
         <nav>
@@ -62,7 +62,7 @@ export function App() {
       <div className="content">
         <header className="topbar">
           <a className="wordmark" href="#/">
-            CS2<b>LENS</b>
+            FREEZE<b>TIME</b>
             <small>{t("app.tagline")}</small>
           </a>
         </header>

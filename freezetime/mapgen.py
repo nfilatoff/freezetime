@@ -28,7 +28,7 @@ import polars as pl
 from awpy import Demo, data
 from matplotlib.path import Path as MplPath
 
-from cs2lens.maps import CONFIG_DIR
+from freezetime.maps import CONFIG_DIR
 
 CELL = 32.0
 TICK_STEP = 8  # sample every 8th tick
@@ -232,7 +232,7 @@ def derive(demos: list[str | Path], map_name: str | None = None) -> dict:
 
     return {
         "map": map_name,
-        "source": f"derived by `cs2lens maps derive` from {len(demos)} demo(s): nav place names "
+        "source": f"derived by `freezetime maps derive` from {len(demos)} demo(s): nav place names "
         f"(m_szLastPlaceName) and T bomb-zone flags (m_bInBombZone), {CELL:g}-unit cells",
         "levels": levels,
         "sites": sites,

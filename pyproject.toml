@@ -1,5 +1,5 @@
 [project]
-name = "cs2lens"
+name = "freezetime"
 version = "0.1.0"
 description = "CS2 demo analyzer built on awpy 3"
 requires-python = ">=3.11"
@@ -9,18 +9,18 @@ dependencies = ["awpy>=3.1", "polars", "matplotlib", "typer", "fastapi", "uvicor
 dev = ["pytest"]
 
 [project.scripts]
-cs2lens = "cs2lens.cli:app"
+freezetime = "freezetime.cli:app"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["cs2lens", "cs2lens.maps", "cs2lens.app"]
+packages = ["freezetime", "freezetime.maps", "freezetime.app"]
 
 [tool.setuptools.package-data]
-"cs2lens.maps" = ["*.json"]
-"cs2lens.app" = ["static/*", "static/assets/*"]
+"freezetime.maps" = ["*.json"]
+"freezetime.app" = ["static/*", "static/assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

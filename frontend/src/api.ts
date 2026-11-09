@@ -1,4 +1,4 @@
-// Typed client for the FastAPI backend (cs2lens/app/server.py).
+// Typed client for the FastAPI backend (freezetime/app/server.py).
 import { t, td } from "./i18n";
 
 export type Row = Record<string, string | number | boolean | null>;

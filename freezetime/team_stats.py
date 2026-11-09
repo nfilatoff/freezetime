@@ -6,9 +6,9 @@ from pathlib import Path
 
 import polars as pl
 
-from cs2lens.context import load_match
-from cs2lens.context import pct as _pct
-from cs2lens.context import with_round as _with_round
+from freezetime.context import load_match
+from freezetime.context import pct as _pct
+from freezetime.context import with_round as _with_round
 
 
 

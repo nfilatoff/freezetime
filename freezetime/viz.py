@@ -16,8 +16,8 @@ import matplotlib.pyplot as plt  # noqa: E402
 import polars as pl  # noqa: E402
 from awpy import plot  # noqa: E402
 
-from cs2lens.context import Match, load_match  # noqa: E402
-from cs2lens.tactics import userid_map, utility_events  # noqa: E402
+from freezetime.context import Match, load_match  # noqa: E402
+from freezetime.tactics import userid_map, utility_events  # noqa: E402
 
 UTIL_COLORS = {"smoke": "#cfcfcf", "flash": "#fff35c", "he": "#ff5c5c", "molotov": "#ff9f1c"}
 
@@ -207,7 +207,7 @@ def zones_map(map_name: str, path: str | Path, *, plants: pl.DataFrame | None = 
     """
     from matplotlib.patches import Polygon as MplPolygon
 
-    from cs2lens.maps import load_map_config
+    from freezetime.maps import load_map_config
 
     cfg = load_map_config(map_name)
     if cfg is None:

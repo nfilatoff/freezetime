@@ -19,9 +19,9 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from cs2lens.app import hlae
-from cs2lens.app.cs2 import INGAME, LOAD_WAIT, NO_CONSOLE, CS2Bridge, NoConsole, game_running, load_fresh, user_cvars
-from cs2lens.highlights import keep_ranges
+from freezetime.app import hlae
+from freezetime.app.cs2 import INGAME, LOAD_WAIT, NO_CONSOLE, CS2Bridge, NoConsole, game_running, load_fresh, user_cvars
+from freezetime.highlights import keep_ranges
 
 PREROLL = 1.0  # seconds before the clip window that are played (and cut) so the view settles
 SEEK_WAIT = 10.0  # seconds for a demo seek (measured: 5 for 20 minutes of a demo)
@@ -210,7 +210,7 @@ class Recorder:
                 "phase": "connect", "encoder": encoder, "files": [], "error": None, "started": time.time(),
             }
         args = (ffmpeg, encoder, match_id, folder, playdemo, clips, capture, fps, clean)
-        threading.Thread(target=self._run, args=args, daemon=True, name="cs2lens-recorder").start()
+        threading.Thread(target=self._run, args=args, daemon=True, name="freezetime-recorder").start()
         return {"steam_url": None}
 
     def cancel(self) -> None:
@@ -233,7 +233,7 @@ class Recorder:
                 "encoder": encoder, "files": [], "error": None, "started": time.time(),
             }
         args = (ffmpeg, encoder, folder, playdemo, game_dir, hlae_exe, clips, fps, clean, width, height)
-        threading.Thread(target=self._run_hlae, args=args, daemon=True, name="cs2lens-hlae").start()
+        threading.Thread(target=self._run_hlae, args=args, daemon=True, name="freezetime-hlae").start()
         return {"steam_url": None}
 
     def _run_hlae(self, ffmpeg, encoder, folder: Path, playdemo, game_dir, hlae_exe, clips: list[Clip], fps, clean, width, height) -> None:

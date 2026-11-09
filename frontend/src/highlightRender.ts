@@ -155,7 +155,7 @@ export function drawHighlight(ctx: CanvasRenderingContext2D, assets: MapAssets, 
   ctx.textAlign = "right";
   ctx.font = `700 ${12 * u}px system-ui, sans-serif`;
   ctx.fillStyle = "rgba(255,255,255,0.45)";
-  ctx.fillText("CS2LENS", f.width - 10 * u, f.height - 10 * u);
+  ctx.fillText("FREEZETIME", f.width - 10 * u, f.height - 10 * u);
 }
 
 function drawKillFeed(ctx: CanvasRenderingContext2D, f: HlFrame, tick: number, u: number) {

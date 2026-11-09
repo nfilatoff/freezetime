@@ -12,7 +12,8 @@ export type { Key };
 export const LANGS: [Lang, string][] = [["en", "English"], ["ru", "Русский"], ["es", "Español"]];
 
 const DICTS: Record<Lang, Record<Key, Entry>> = { en, ru, es };
-const STORAGE = "cs2lens.lang";
+const STORAGE = "freezetime.lang";
+const OLD_STORAGE = "cs2lens.lang"; // the name before the project was renamed
 
 /** "ru-RU", "es_419", "Spanish_Spain"... -> a supported non-default language, or null. */
 export function langOf(tag: string | null | undefined): Lang | null {
@@ -24,7 +25,7 @@ export function langOf(tag: string | null | undefined): Lang | null {
 
 function saved(): Lang | null {
   try {
-    const v = localStorage.getItem(STORAGE);
+    const v = localStorage.getItem(STORAGE) ?? localStorage.getItem(OLD_STORAGE);
     return v === "en" || v === "ru" || v === "es" ? v : null;
   } catch {
     return null;

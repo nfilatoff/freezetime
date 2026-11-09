@@ -4,11 +4,11 @@ from pathlib import Path
 
 import typer
 
-from cs2lens.aggregate import aggregate
-from cs2lens.extract import extract
-from cs2lens.report import aggregate_markdown, tactics_markdown, to_markdown
-from cs2lens.tactics import tactics
-from cs2lens.team_stats import team_stats
+from freezetime.aggregate import aggregate
+from freezetime.extract import extract
+from freezetime.report import aggregate_markdown, tactics_markdown, to_markdown
+from freezetime.tactics import tactics
+from freezetime.team_stats import team_stats
 
 app = typer.Typer(help="CS2 demo analyzer", no_args_is_help=True)
 
@@ -101,7 +101,7 @@ app.add_typer(viz_app, name="viz")
 @viz_app.command("kills")
 def viz_kills(source: Path, out: Path = Path("out"), side: str | None = None, attacker: bool = False) -> None:
     """Kill-location heatmap (victim positions, or attacker positions with --attacker)."""
-    from cs2lens import viz
+    from freezetime import viz
 
     d = _resolve(source, out)
     typer.echo(viz.kill_heatmap(d, d / "viz" / f"kills_{side or 'all'}.png", side=side, role="attacker" if attacker else "victim"))
@@ -110,7 +110,7 @@ def viz_kills(source: Path, out: Path = Path("out"), side: str | None = None, at
 @viz_app.command("utility")
 def viz_utility(source: Path, out: Path = Path("out"), side: str | None = None, team: str | None = None) -> None:
     """Grenade landing map, optionally for one side (t/ct) or team."""
-    from cs2lens import viz
+    from freezetime import viz
 
     d = _resolve(source, out)
     name = "_".join(p for p in ("utility", side, team and team.replace(" ", "-")) if p)
@@ -120,7 +120,7 @@ def viz_utility(source: Path, out: Path = Path("out"), side: str | None = None, 
 @viz_app.command("frame")
 def viz_frame(source: Path, round_num: int, sec: float = 30.0, out: Path = Path("out")) -> None:
     """One frame of a round, SEC seconds after freeze time."""
-    from cs2lens import viz
+    from freezetime import viz
 
     d = _resolve(source, out)
     typer.echo(viz.round_frame(d, d / "viz" / f"round{round_num}_{sec:g}s.png", round_num=round_num, sec=sec))
@@ -129,7 +129,7 @@ def viz_frame(source: Path, round_num: int, sec: float = 30.0, out: Path = Path(
 @viz_app.command("gif")
 def viz_gif(source: Path, round_num: int, step_sec: float = 0.5, fps: int = 4, out: Path = Path("out")) -> None:
     """Animated 2D replay of a round."""
-    from cs2lens import viz
+    from freezetime import viz
 
     d = _resolve(source, out)
     typer.echo(viz.round_gif(d, d / "viz" / f"round{round_num}.gif", round_num=round_num, step_sec=step_sec, fps=fps))
@@ -142,7 +142,7 @@ def viz_zones(map_name: str, out: Path = Path("out")) -> None:
 
     import polars as pl
 
-    from cs2lens import viz
+    from freezetime import viz
 
     plants = []
     for manifest in out.glob("*/manifest.json"):
@@ -160,7 +160,7 @@ app.add_typer(maps_app, name="maps")
 @maps_app.command("list")
 def maps_list() -> None:
     """Maps with a config, their levels and zone counts."""
-    from cs2lens.maps import available_maps, load_map_config
+    from freezetime.maps import available_maps, load_map_config
 
     for name in available_maps():
         cfg = load_map_config(name)
@@ -174,7 +174,7 @@ def maps_list() -> None:
 @maps_app.command("derive")
 def maps_derive(demos: list[Path], output: Path | None = None) -> None:
     """Build (or rebuild) a map config from .dem files of one map; zone groups are kept."""
-    from cs2lens.mapgen import derive, write_config
+    from freezetime.mapgen import derive, write_config
 
     cfg = derive(demos)
     path = write_config(cfg, output)
@@ -189,14 +189,14 @@ def app_cmd(out: Path = Path("out"), host: str = "127.0.0.1", port: int = 8000, 
 
     import uvicorn
 
-    from cs2lens.app.server import STATIC_DIR, create_app
+    from freezetime.app.server import STATIC_DIR, create_app
 
     if not STATIC_DIR.exists():
         typer.echo("frontend is not built yet: cd frontend && npm install && npm run build", err=True)
     url = f"http://{host}:{port}/"
     if open_browser:
         threading.Timer(1.0, webbrowser.open, args=(url,)).start()
-    typer.echo(f"cs2lens app on {url} (data in {out.resolve()})")
+    typer.echo(f"Freezetime app on {url} (data in {out.resolve()})")
     uvicorn.run(create_app(out), host=host, port=port, log_level="warning")
 
 

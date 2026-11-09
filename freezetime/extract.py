@@ -9,7 +9,7 @@ from pathlib import Path
 import polars as pl
 from awpy import Demo, InvalidDemoError
 
-from cs2lens.demorepair import repair_demo
+from freezetime.demorepair import repair_demo
 
 REPAIRED_FILE = "_repaired.dem"  # a temporary copy, for a demo the parser refuses (see demorepair.py)
 REPLAY_EVERY = 4  # ticks between replay frames (16 per second at 64 tick)

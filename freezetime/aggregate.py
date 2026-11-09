@@ -13,9 +13,9 @@ from pathlib import Path
 
 import polars as pl
 
-from cs2lens.context import load_match, pct
-from cs2lens.tactics import tactics
-from cs2lens.team_stats import team_stats
+from freezetime.context import load_match, pct
+from freezetime.tactics import tactics
+from freezetime.team_stats import team_stats
 
 
 @dataclass

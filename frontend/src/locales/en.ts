@@ -511,7 +511,7 @@ export const en = {
   "sum.plant": "{label}  {clock}  {player} — plant {site}",
   "sum.capPos": "{zone} at {clock} in {n} of {N}",
   "sum.capNade": "{nade} {zone} ~{clock} ({n} of {N})",
-  "sum.header": "cs2lens clip — {name} · {sides} · {map}",
+  "sum.header": "Freezetime clip — {name} · {sides} · {map}",
   "sum.player": "Player: {name} ({team})",
   "sum.team": "Team: {name}",
   "sum.mapLine": "Map: {map} · side: {sides} · buy: {buy}",
@@ -539,7 +539,7 @@ export const en = {
   "sum.byRound": "By round:",
   "sum.roundLine": "{label} vs {opp} · {side} · {buy} · {result} · kills {k}, deaths {d}",
   "sum.roundNades": "grenades: {list}",
-  "sum.footer": "Time is the round clock (1:55 = freeze end). Zones are callouts from the cs2lens map config.",
+  "sum.footer": "Time is the round clock (1:55 = freeze end). Zones are callouts from the Freezetime map config.",
 
   // ---- highlights ----
   "hl.kind.ace": "Ace",
@@ -593,7 +593,7 @@ export const en = {
   "rec.encoder": "encoder {enc}",
   "rec.account": "you: {name}",
   "rec.me": "you",
-  "rec.noFfmpeg": "ffmpeg was not found: install it (winget install Gyan.FFmpeg) and restart cs2lens.",
+  "rec.noFfmpeg": "ffmpeg was not found: install it (winget install Gyan.FFmpeg) and restart Freezetime.",
   "rec.checked": "checked ({n})",
   "rec.kills": "every kill of",
   "rec.capture": "capture",

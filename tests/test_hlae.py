@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from cs2lens.app import hlae
-from cs2lens.app import recorder as rec
-from cs2lens.app.cs2 import CS2Bridge
+from freezetime.app import hlae
+from freezetime.app import recorder as rec
+from freezetime.app.cs2 import CS2Bridge
 from tests.test_lineups import _wait
 
 
@@ -22,15 +22,15 @@ def test_ticks_of_a_clip():
 
 
 def test_hlae_stays_out_of_the_install_folder(monkeypatch, tmp_path):
-    """install.ps1 clones into %LOCALAPPDATA%/cs2lens and can't do that if HLAE is already there."""
+    """install.ps1 clones into %LOCALAPPDATA%/freezetime and can't do that if HLAE is already there."""
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    assert not hlae.default_dir().is_relative_to(tmp_path / "cs2lens")
+    assert not hlae.default_dir().is_relative_to(tmp_path / "freezetime")
 
 
 def test_launch_command(tmp_path):
     cmd = hlae.launch_command(tmp_path / "HLAE.exe", tmp_path / "game" / "csgo", "my_demo", 1920, 1080)
     args = cmd[cmd.index("-cmdLine") + 1]
-    assert "-insecure" in args and "-condebug" in args and args.endswith("+exec cs2lens_hlae_boot +playdemo my_demo")
+    assert "-insecure" in args and "-condebug" in args and args.endswith("+exec freezetime_hlae_boot +playdemo my_demo")
     assert cmd[cmd.index("-hookDllPath") + 1].endswith("AfxHookSource2.dll")
     assert cmd[cmd.index("-programPath") + 1].endswith("cs2.exe")
 
@@ -41,7 +41,7 @@ def test_takes_go_to_an_absolute_path(tmp_path, monkeypatch):
     seen = {}
 
     def fake_session(_hlae, _game, _demo, _batch, cfgs, *_rest):
-        seen["setup"] = cfgs["cs2lens_hlae_0_setup"][0]
+        seen["setup"] = cfgs["freezetime_hlae_0_setup"][0]
 
     monkeypatch.setattr(rec.hlae, "run_session", fake_session)
     monkeypatch.setattr(rec.hlae, "configure_ffmpeg", lambda *_: None)
@@ -63,18 +63,18 @@ def test_overlapping_clips_go_to_another_run():
 def test_session_cfgs(tmp_path):
     a, b = clip(1000), clip(5000, player=None)
     cfgs = hlae.session_cfgs([a, b], tmp_path, ["-c:v", "h264_nvenc"], 60, ["cl_draw_only_deathnotices 1"], ["cl_draw_only_deathnotices 0"])
-    boot = cfgs["cs2lens_hlae_boot"]
-    assert 'mirv_cmd addAtTick 1064 "exec cs2lens_hlae_0_rec"' in boot
-    assert 'mirv_cmd addAtTick 1192 "exec cs2lens_hlae_0_end"' in boot
-    assert 'mirv_cmd addAtTick 5192 "exec cs2lens_hlae_1_end"' in boot
-    assert 'mirv_cmd addAtTick 5256 "exec cs2lens_hlae_quit"' in boot
-    assert "demo_gototick 1000" in cfgs["cs2lens_hlae_start"]
-    assert "demo_gototick 5000" in cfgs["cs2lens_hlae_0_end"]
-    assert not any("gototick" in line for line in cfgs["cs2lens_hlae_1_end"])
-    assert 'spec_player "kanf1s"' in cfgs["cs2lens_hlae_0_setup"]
-    assert not any("spec_player" in line for line in cfgs["cs2lens_hlae_1_setup"])
-    assert cfgs["cs2lens_hlae_quit"][0] == "cl_draw_only_deathnotices 0" and cfgs["cs2lens_hlae_quit"][-1] == "quit"
-    assert "snd_mute_losefocus 1" in cfgs["cs2lens_hlae_quit"]  # taken back before the game closes
+    boot = cfgs["freezetime_hlae_boot"]
+    assert 'mirv_cmd addAtTick 1064 "exec freezetime_hlae_0_rec"' in boot
+    assert 'mirv_cmd addAtTick 1192 "exec freezetime_hlae_0_end"' in boot
+    assert 'mirv_cmd addAtTick 5192 "exec freezetime_hlae_1_end"' in boot
+    assert 'mirv_cmd addAtTick 5256 "exec freezetime_hlae_quit"' in boot
+    assert "demo_gototick 1000" in cfgs["freezetime_hlae_start"]
+    assert "demo_gototick 5000" in cfgs["freezetime_hlae_0_end"]
+    assert not any("gototick" in line for line in cfgs["freezetime_hlae_1_end"])
+    assert 'spec_player "kanf1s"' in cfgs["freezetime_hlae_0_setup"]
+    assert not any("spec_player" in line for line in cfgs["freezetime_hlae_1_setup"])
+    assert cfgs["freezetime_hlae_quit"][0] == "cl_draw_only_deathnotices 0" and cfgs["freezetime_hlae_quit"][-1] == "quit"
+    assert "snd_mute_losefocus 1" in cfgs["freezetime_hlae_quit"]  # taken back before the game closes
     assert any("{QUOTE}{AFX_STREAM_PATH}" in line and "video.mp4" in line for line in boot)
 
 
@@ -142,9 +142,9 @@ def test_session_end_to_end(tmp_path, monkeypatch):
     alive = []
 
     def fake_popen(cmd, **_kw):
-        assert "cs2lens_hlae_boot" in cmd[cmd.index("-cmdLine") + 1]
-        assert (game / "cfg" / "cs2lens_hlae_boot.cfg").exists()
-        (game / "console.log").write_text("[InputService] execing cs2lens_hlae_start\n[InputService] execing cs2lens_hlae_0_rec\n", encoding="utf-8")
+        assert "freezetime_hlae_boot" in cmd[cmd.index("-cmdLine") + 1]
+        assert (game / "cfg" / "freezetime_hlae_boot.cfg").exists()
+        (game / "console.log").write_text("[InputService] execing freezetime_hlae_start\n[InputService] execing freezetime_hlae_0_rec\n", encoding="utf-8")
         _fake_take(folder / "_hlae" / "clip0")
         alive.append(True)
 
@@ -170,7 +170,7 @@ def test_session_end_to_end(tmp_path, monkeypatch):
     [name] = r.state["files"]
     probe = subprocess.run([ffmpeg, "-hide_banner", "-i", str(folder / name)], capture_output=True, text=True).stderr
     assert "Video: h264" in probe and "Audio: aac" in probe
-    assert not (folder / "_hlae").exists() and not list((game / "cfg").glob("cs2lens_hlae_*"))
+    assert not (folder / "_hlae").exists() and not list((game / "cfg").glob("freezetime_hlae_*"))
 
 
 def test_a_game_without_the_hook_is_reported(tmp_path):

@@ -2,8 +2,8 @@ import numpy as np
 import polars as pl
 import pytest
 
-from cs2lens.mapgen import _convex_hull, _simplify, humanize
-from cs2lens.maps import GROUPS, Area, Level, MapConfig, available_maps, load_map_config
+from freezetime.mapgen import _convex_hull, _simplify, humanize
+from freezetime.maps import GROUPS, Area, Level, MapConfig, available_maps, load_map_config
 
 POOL = ["de_ancient", "de_anubis", "de_cache", "de_dust2", "de_inferno", "de_mirage", "de_nuke"]
 

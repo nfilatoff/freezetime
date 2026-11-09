@@ -1,6 +1,6 @@
 {
   "map": "de_nuke",
-  "source": "derived by `cs2lens maps derive` from 1 demo: nav place names (m_szLastPlaceName), 32-unit cells. Zone groups set by hand from the map layout and who reaches each zone when. Sites: convex hull of the bomb-site outline on the radar, T bomb-zone flags and plants (one demo sees too little of a site).",
+  "source": "derived by `freezetime maps derive` from 1 demo: nav place names (m_szLastPlaceName), 32-unit cells. Zone groups set by hand from the map layout and who reaches each zone when. Sites: convex hull of the bomb-site outline on the radar, T bomb-zone flags and plants (one demo sees too little of a site).",
   "levels": [
     {"name": "default", "z_min": -495.0, "z_max": 1000000000.0, "radar": "de_nuke"},
     {"name": "lower", "z_min": -1000000000.0, "z_max": -495.0, "radar": "de_nuke_lower"}

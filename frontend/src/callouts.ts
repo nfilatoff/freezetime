@@ -8,13 +8,14 @@ import { RADAR_SIZE, worldToPx } from "./radar";
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 type Pt = [number, number];
 
-const STORAGE = "cs2lens.callouts";
+const STORAGE = "freezetime.callouts";
+const OLD_STORAGE = "cs2lens.callouts"; // the name before the project was renamed
 
 export type CalloutMode = "off" | "names" | "full";
 
 function saved(): CalloutMode {
   try {
-    const v = localStorage.getItem(STORAGE);
+    const v = localStorage.getItem(STORAGE) ?? localStorage.getItem(OLD_STORAGE);
     if (v === "names" || v === "full") return v;
     return v === "1" ? "full" : "off"; // "1" and "0": the on/off switch this replaced
   } catch {

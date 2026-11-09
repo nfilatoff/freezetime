@@ -16,8 +16,8 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from cs2lens.context import Match, load_match, pct, round_context, with_round
-from cs2lens.tactics import SiteZoner, tactics, userid_map, utility_events
+from freezetime.context import Match, load_match, pct, round_context, with_round
+from freezetime.tactics import SiteZoner, tactics, userid_map, utility_events
 
 LOW_SAMPLE = 5  # fewer rounds than this: the conclusion is marked as thin
 MAX_CARDS = 7

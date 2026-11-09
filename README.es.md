@@ -1,4 +1,4 @@
-# cs2lens
+# Freezetime
 
 [English](README.md) | **Español** | [Русский](README.ru.md)
 
@@ -14,10 +14,10 @@ Funciones:
 - **Varias partidas** — totales con porcentajes recalculados, desglose por mapa y jugador, unificación de nombres de equipo (alias).
 - **Rival (dosier)** — eliges equipo y mapa: 5–7 conclusiones con número de rondas y enlaces a la repetición, tiempos «zona × segundo», un playbook de estrategias recurrentes, heatmap de varias partidas, economía tras la ronda de pistolas y tras rachas de derrotas, jugadores (armas, trades, posiciones iniciales), exportación a Markdown y PDF.
 - **Configuraciones de mapas** — polígonos de los sitios de bomba y callouts de todo el mappool competitivo, niveles para mapas de varios niveles.
-- **Aplicación** (`cs2lens app`) — biblioteca de demos con filtros por mapa y equipo, subida de `.dem` y archivos comprimidos, borrado y análisis en segundo plano; página de partida; repetición 2D con armas y granadas de los jugadores, trazadores de disparos y detalles del duelo al pasar el cursor por el lugar de la muerte; 11 tipos de heatmap (movimiento, muertes, kills, aperturas, disparos, daño, cegados, plantas, granadas) con filtros por tiempo de ronda; todos los lanzamientos de granadas como lineups con exportación y botón «Abrir en CS2»; clips GIF/MP4 de un jugador o equipo en las rondas elegidas de una o varias demos, con subtítulo y descripción en texto; highlights de la partida; agregado de varias partidas. Funciona localmente en el navegador, sin internet.
+- **Aplicación** (`freezetime app`) — biblioteca de demos con filtros por mapa y equipo, subida de `.dem` y archivos comprimidos, borrado y análisis en segundo plano; página de partida; repetición 2D con armas y granadas de los jugadores, trazadores de disparos y detalles del duelo al pasar el cursor por el lugar de la muerte; 11 tipos de heatmap (movimiento, muertes, kills, aperturas, disparos, daño, cegados, plantas, granadas) con filtros por tiempo de ronda; todos los lanzamientos de granadas como lineups con exportación y botón «Abrir en CS2»; clips GIF/MP4 de un jugador o equipo en las rondas elegidas de una o varias demos, con subtítulo y descripción en texto; highlights de la partida; agregado de varias partidas. Funciona localmente en el navegador, sin internet.
 - **Highlights** — aces, 4K/3K, clutches 1vN ganados, dobles rápidas y kills especiales (no-scope, a través de pared, a través de humo, cuchillo, zeus) se detectan solos a partir del killfeed; los highlights propios se definen por ronda y ventana de tiempo o con el botón «★ Highlight» de la repetición 2D y se guardan en `highlights.json` junto al análisis. Cada uno se descarga como MP4/GIF con zoom en la acción y killfeed; los marcados, en un solo zip.
-- **Grabación automática en CS2** — como los servicios de clips, pero en tu propio PC: CS2 abierto (las versiones actuales del juego ignoran `-netconport`, así que los comandos van por un cfg y una tecla: escribe una vez en la consola del juego `bind f13 "exec cs2lens_cmd"` y la aplicación detecta el bind sola) reproduce la demo desde los ojos del jugador mientras ffmpeg graba la pantalla (Desktop Duplication) o la ventana de CS2 con un códec por hardware (NVENC/AMF/QSV, si no, x264). Se graban los highlights marcados o todas las kills del jugador elegido: las kills cercanas de una misma ronda forman un solo clip; por defecto se elige tu cuenta de Steam. Los clips se recortan exactamente a la ventana, se guardan en `<análisis>/recordings` y se ven y descargan en la misma página. Hace falta `ffmpeg` en el PATH (`winget install Gyan.FFmpeg`) o el paquete `imageio-ffmpeg`.
-- **Grabación con HLAE** — el modo «HLAE (con sonido)» del mismo bloque: la aplicación cierra CS2 si está abierto (tras confirmación), lanza el juego con [HLAE](https://github.com/advancedfx/advancedfx) y `-insecure`, graba clips con sonido exactamente por ticks (`mirv_cmd addAtTick`, `mirv_streams`) y cierra el juego (`quit`). No se pulsan teclas, el juego puede estar en segundo plano, no hacen falta bind ni editar `gameinfo.gi`. HLAE se instala con un botón de la aplicación desde las versiones oficiales, con verificación SHA-256, en `%LOCALAPPDATA%\cs2lens-tools\hlae`. Desde un juego lanzado con HLAE no se puede entrar en servidores VAC.
+- **Grabación automática en CS2** — como los servicios de clips, pero en tu propio PC: CS2 abierto (las versiones actuales del juego ignoran `-netconport`, así que los comandos van por un cfg y una tecla: escribe una vez en la consola del juego `bind f13 "exec freezetime_cmd"` y la aplicación detecta el bind sola) reproduce la demo desde los ojos del jugador mientras ffmpeg graba la pantalla (Desktop Duplication) o la ventana de CS2 con un códec por hardware (NVENC/AMF/QSV, si no, x264). Se graban los highlights marcados o todas las kills del jugador elegido: las kills cercanas de una misma ronda forman un solo clip; por defecto se elige tu cuenta de Steam. Los clips se recortan exactamente a la ventana, se guardan en `<análisis>/recordings` y se ven y descargan en la misma página. Hace falta `ffmpeg` en el PATH (`winget install Gyan.FFmpeg`) o el paquete `imageio-ffmpeg`.
+- **Grabación con HLAE** — el modo «HLAE (con sonido)» del mismo bloque: la aplicación cierra CS2 si está abierto (tras confirmación), lanza el juego con [HLAE](https://github.com/advancedfx/advancedfx) y `-insecure`, graba clips con sonido exactamente por ticks (`mirv_cmd addAtTick`, `mirv_streams`) y cierra el juego (`quit`). No se pulsan teclas, el juego puede estar en segundo plano, no hacen falta bind ni editar `gameinfo.gi`. HLAE se instala con un botón de la aplicación desde las versiones oficiales, con verificación SHA-256, en `%LOCALAPPDATA%\freezetime-tools\hlae`. Desde un juego lanzado con HLAE no se puede entrar en servidores VAC.
 - **Recorte de pausas** — al grabar se eliminan las pausas entre kills más largas que un umbral (3 s por defecto): en el modo «todas las kills» esas kills pasan a ser clips separados, y un highlight sigue siendo un solo vídeo con saltos a la siguiente kill, junto con el sonido.
 - **Idiomas de la interfaz** — inglés, ruso y español. Por defecto inglés; si el idioma del navegador o de Windows es ruso o español, se activa ese. La elección en el panel lateral se recuerda en el navegador.
 
@@ -29,18 +29,20 @@ Funciones:
 
 ### Con un solo comando (Windows)
 
-El script [`install.ps1`](install.ps1) instala todo lo necesario: si faltan, Git, Python 3.13 y Node.js LTS (con winget); después clona el proyecto, crea `.venv`, compila el frontend, descarga los radares de awpy y crea un acceso directo `cs2lens` en el escritorio. Cómo actualizar una aplicación ya instalada — en la sección [«Actualización»](#actualización).
+El script [`install.ps1`](install.ps1) instala todo lo necesario: si faltan, Git, Python 3.13 y Node.js LTS (con winget); después clona el proyecto, crea `.venv`, compila el frontend, descarga los radares de awpy y crea un acceso directo `freezetime` en el escritorio. Cómo actualizar una aplicación ya instalada — en la sección [«Actualización»](#actualización).
 
 ```powershell
-irm https://raw.githubusercontent.com/nfilatoff/cs2lens/main/install.ps1 -OutFile install.ps1
+irm https://raw.githubusercontent.com/nfilatoff/freezetime/main/install.ps1 -OutFile install.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-Por defecto el proyecto se instala en `%LOCALAPPDATA%\cs2lens`; para otra carpeta, `-InstallDir 'D:\cs2lens'`. Si ejecutas el script desde un repositorio ya clonado, usa ese. Opciones: `-CheckOnly` (solo comprobar), `-SkipRadars`, `-NoShortcut`, `-Dev` (con pytest), `-Launch` (iniciar tras instalar).
+Por defecto el proyecto se instala en `%LOCALAPPDATA%\freezetime`; para otra carpeta, `-InstallDir 'D:\freezetime'`. Si ejecutas el script desde un repositorio ya clonado, usa ese. Opciones: `-CheckOnly` (solo comprobar), `-SkipRadars`, `-NoShortcut`, `-Dev` (con pytest), `-Launch` (iniciar tras instalar).
 
 ### Actualización
 
-Primero cierra la aplicación: un `cs2lens` en ejecución impide reinstalar el paquete. Las partidas analizadas, los clips, la configuración y HLAE no se ven afectados por la actualización.
+**Si venías de cs2lens.** Antes el proyecto se llamaba cs2lens. El script actualiza en el sitio una instalación antigua en `%LOCALAPPDATA%\cs2lens`, quita el paquete, el lanzador y el acceso directo antiguos, y HLAE se mueve solo desde `cs2lens-tools` en el primer uso. Las partidas procesadas se conservan. Los enlaces antiguos a `github.com/nfilatoff/cs2lens` redirigen al nuevo repositorio. En CS2 hay que volver a asignar la tecla una vez: `bind f13 "exec freezetime_cmd"`.
+
+Primero cierra la aplicación: un `freezetime` en ejecución impide reinstalar el paquete. Las partidas analizadas, los clips, la configuración y HLAE no se ven afectados por la actualización.
 
 **Si instalaste con el script.** Vuelve a ejecutar `install.ps1` desde la carpeta donde lo descargaste. Hará `git pull`, actualizará las dependencias y recompilará la aplicación:
 
@@ -64,15 +66,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -SkipRadars -N
 Hacen falta Python 3.13 (sirve ≥ 3.11) y Node.js (≥ 20) para compilar el frontend.
 
 ```powershell
-git clone https://github.com/nfilatoff/cs2lens.git
-cd cs2lens
+git clone https://github.com/nfilatoff/freezetime.git
+cd freezetime
 python -m venv .venv
 .venv\Scripts\activate
-pip install -e ".[dev]"          # cs2lens + awpy, polars, matplotlib, typer, fastapi, uvicorn, zstandard; dev — pytest
+pip install -e ".[dev]"          # freezetime + awpy, polars, matplotlib, typer, fastapi, uvicorn, zstandard; dev — pytest
 
 cd frontend
 npm install
-npm run build                    # compila el frontend en cs2lens/app/static
+npm run build                    # compila el frontend en freezetime/app/static
 cd ..
 ```
 
@@ -83,7 +85,7 @@ En la consola de Windows, para cirílico y caracteres especiales en la salida, d
 ### Primer arranque
 
 ```powershell
-cs2lens app                      # http://127.0.0.1:8000, el navegador se abre solo
+freezetime app                      # http://127.0.0.1:8000, el navegador se abre solo
 ```
 
 En «Biblioteca» añade una carpeta con demos (por ejemplo, `D:\Steam\steamapps\common\Counter-Strike Global Offensive\game\csgo`) o sube archivos con el botón «Subir .dem o archivo…» o arrastrándolos a la página. Las demos de carpetas se analizan con el botón «Analizar», las subidas, al momento. El análisis va en segundo plano con progreso; una demo de 250–300 MB se analiza en 20–30 s. Las demos ya analizadas no se vuelven a analizar.
@@ -100,41 +102,41 @@ Para exportaciones hechas antes de que existieran los fotogramas de repetición,
 ## Comandos CLI
 
 ```powershell
-cs2lens extract demo.dem [--out out] [--snapshot-seconds 0.5]
+freezetime extract demo.dem [--out out] [--snapshot-seconds 0.5]
 ```
 Analiza la demo en `out/<nombre de la demo>/`.
 
 ```powershell
-cs2lens report  out\Mirage_ArenaPro_vs_LosTopos     # o ruta a un .dem: la analiza si aún no lo está
-cs2lens tactics out\Mirage_ArenaPro_vs_LosTopos
+freezetime report  out\Mirage_ArenaPro_vs_LosTopos     # o ruta a un .dem: la analiza si aún no lo está
+freezetime tactics out\Mirage_ArenaPro_vs_LosTopos
 ```
 Informes de equipo y tácticos en Markdown: se imprimen en la consola y se guardan como `team_report.md` / `tactics_report.md` en la carpeta de exportación.
 
 ```powershell
-cs2lens batch D:\demos\week1 out\Dust2ArenaPro_vs_teamSirena some.dem --name week1 --alias "team_dr1amwtf=Arena Pro Team"
+freezetime batch D:\demos\week1 out\Dust2ArenaPro_vs_teamSirena some.dem --name week1 --alias "team_dr1amwtf=Arena Pro Team"
 ```
 Agregado de varias partidas. Fuentes: `.dem`, carpetas con `.dem` o carpetas de exportación. Resultado: `out/<name>/aggregate_report.md` y tablas `*.parquet`. `--alias ANTIGUO=NUEVO` se puede repetir.
 
 ```powershell
-cs2lens viz kills   out\<partida> [--side t|ct] [--attacker]   # heatmap de lugares de muerte (o posiciones de los asesinos)
-cs2lens viz utility out\<partida> [--side t|ct] [--team NAME]  # dónde cayeron las granadas
-cs2lens viz frame   out\<partida> 7 --sec 40                   # fotograma de la ronda 7, 40 s después del freezetime
-cs2lens viz gif     out\<partida> 7 [--step-sec 0.5] [--fps 4] # repetición GIF de la ronda (matplotlib)
-cs2lens viz zones   de_nuke                                    # configuración del mapa sobre el radar + plantas de out/
+freezetime viz kills   out\<partida> [--side t|ct] [--attacker]   # heatmap de lugares de muerte (o posiciones de los asesinos)
+freezetime viz utility out\<partida> [--side t|ct] [--team NAME]  # dónde cayeron las granadas
+freezetime viz frame   out\<partida> 7 --sec 40                   # fotograma de la ronda 7, 40 s después del freezetime
+freezetime viz gif     out\<partida> 7 [--step-sec 0.5] [--fps 4] # repetición GIF de la ronda (matplotlib)
+freezetime viz zones   de_nuke                                    # configuración del mapa sobre el radar + plantas de out/
 ```
 Los PNG/GIF se guardan en `out/<partida>/viz/` (`viz zones`, en `out/maps/`). En mapas de varios niveles (Nuke) se dibujan dos paneles: nivel superior e inferior.
 
 ```powershell
-cs2lens maps list                                           # mapas con configuración, niveles, número de zonas
-cs2lens maps derive a.dem b.dem [--output path.json]        # crear/actualizar la configuración de un mapa a partir de demos
+freezetime maps list                                           # mapas con configuración, niveles, número de zonas
+freezetime maps derive a.dem b.dem [--output path.json]        # crear/actualizar la configuración de un mapa a partir de demos
 ```
 
 ```powershell
-cs2lens app [--out out] [--host 127.0.0.1] [--port 8000] [--no-open-browser]
+freezetime app [--out out] [--host 127.0.0.1] [--port 8000] [--no-open-browser]
 ```
 Inicia la aplicación web.
 
-Desarrollo del frontend: `cs2lens app --port 8000` en una ventana y `cd frontend; npm run dev` en otra. Vite redirige `/api` al puerto 8000.
+Desarrollo del frontend: `freezetime app --port 8000` en una ventana y `cd frontend; npm run dev` en otra. Vite redirige `/api` al puerto 8000.
 
 Tests: `pytest`. El fixture son las rondas 1–8 de una partida de Dust2, generadas con `tests/make_fixture.py`.
 
@@ -144,14 +146,14 @@ Tests: `pytest`. El fixture son las rondas 1–8 de una partida de Dust2, genera
 |---|---|
 | `out/<demo>/` | Exportación de una demo (ver abajo). |
 | `out/<demo>/replay/round_<n>.v<k>.json.gz` | Caché de datos de repetición por ronda; se crea al abrir la ronda por primera vez (repetición o clip). Si cambia el formato (`k`), los archivos antiguos se ignoran. |
-| `out/<demo>/viz/` | Imágenes de `cs2lens viz`. |
-| `out/<name>/` | Resultado de `cs2lens batch`. |
-| `out/maps/` | Dibujos de `cs2lens viz zones`. |
+| `out/<demo>/viz/` | Imágenes de `freezetime viz`. |
+| `out/<name>/` | Resultado de `freezetime batch`. |
+| `out/maps/` | Dibujos de `freezetime viz zones`. |
 | `out/library.json` | Configuración de la aplicación: carpetas de demos, carpeta de CS2 y puerto de la consola de red, nombres de equipos (`team_aliases`), equipo propio (`own_team`). |
-| `<CS2>/game/csgo/cfg/cs2lens_*.cfg` | Lineups y listas de práctica escritos con los botones «Abrir en CS2» e «Instalar en CS2». |
+| `<CS2>/game/csgo/cfg/freezetime_*.cfg` | Lineups y listas de práctica escritos con los botones «Abrir en CS2» e «Instalar en CS2». |
 | `out/_uploads/` | Demos subidas desde la aplicación (y extraídas de archivos comprimidos). |
 | `~/.awpy/<versión>/` | Caché de awpy: radares (`radars/*.png`) y `map_data.json` (transformación de coordenadas, niveles). |
-| `cs2lens/maps/<map>.json` | Configuraciones de mapas (en el repositorio). |
+| `freezetime/maps/<map>.json` | Configuraciones de mapas (en el repositorio). |
 
 Las demos, las exportaciones y `node_modules` no van a git (ver `.gitignore`).
 
@@ -179,7 +181,7 @@ Mappool Active Duty de CS2 a **30.10.2026**: Ancient, Anubis, Cache, Dust II, In
 | de_cache | ✓ | `maps derive`, 1 demo; grupos de zonas a mano; sitios: contorno en el radar + demo | demo real: 10/10 plantas dentro del polígono de su sitio, pero es la misma demo usada para crearla |
 | de_nuke | ✓ (2 niveles) | `maps derive`, 1 demo; grupos de zonas a mano; sitios: contorno en el radar + demo | demo real: 6/6 plantas dentro del polígono de su sitio, pero es la misma demo usada para crearla |
 
-Los grupos de zonas de Cache y Nuke se definieron a mano según la geometría del mapa y según quién llega a cada zona y cuándo, así que conviene revisar algunas zonas dudosas (en Nuke, Control y Admin). Cuando haya más demos, la configuración se puede regenerar: `cs2lens maps derive <todas las demos del mapa>`. Los grupos se conservan por nombre de zona, y las zonas nuevas habrá que completarlas a mano. Los polígonos de los sitios se reconstruyen solo a partir de las demos, así que revísalos con `cs2lens viz zones`: una sola demo cubre el sitio solo en parte.
+Los grupos de zonas de Cache y Nuke se definieron a mano según la geometría del mapa y según quién llega a cada zona y cuándo, así que conviene revisar algunas zonas dudosas (en Nuke, Control y Admin). Cuando haya más demos, la configuración se puede regenerar: `freezetime maps derive <todas las demos del mapa>`. Los grupos se conservan por nombre de zona, y las zonas nuevas habrá que completarlas a mano. Los polígonos de los sitios se reconstruyen solo a partir de las demos, así que revísalos con `freezetime viz zones`: una sola demo cubre el sitio solo en parte.
 
 Los mapas fuera del pool (Overpass, Train, Vertigo, …) no tienen configuración. `tactics` usa para ellos una heurística de reserva y muestra un aviso. Las visualizaciones funcionan en todos los mapas con radar.
 
@@ -209,7 +211,7 @@ Los mapas fuera del pool (Overpass, Train, Vertigo, …) no tienen configuració
 | `replay.py` | Documento de repetición de la ronda (JSON, caché gzip). |
 | `viz.py` | Imágenes sobre el radar (matplotlib mediante `awpy.plot`), paneles por nivel. |
 | `report.py` | Informes en Markdown. |
-| `cli.py` | Comandos `cs2lens`. |
+| `cli.py` | Comandos `freezetime`. |
 | `app/server.py`, `app/jobs.py` | FastAPI: biblioteca (subida, borrado), cola en segundo plano (extracción, análisis, fotogramas de repetición), API de partida, repetición, mapas y agregado, servido del frontend. No duplica el análisis: llama a los módulos anteriores. |
 | `app/archives.py` | Extracción de `.dem` de los archivos comprimidos subidos. |
 | `lineups.py` | Lanzamientos de granadas como lineups: posición, mira, técnica, aterrizaje; comandos de consola y configuraciones de práctica. |
@@ -274,7 +276,7 @@ El fotograma se compone así:
 
 - **Cabecera** — `jugador · lado · zona principal` (por ejemplo `dr1amwtf · T · Top of Mid`), debajo el equipo, el mapa, el filtro de compra y los rivales («FUT Esports · Dust2 · full buy contra Team Vitality»), el número de rondas superpuestas; a la derecha el reloj de ronda y «vivos N/M · velocidad 2×».
 - **Radar** con cuadrícula A–P × 1–16 (para conversaciones del tipo «estaba en H15»). El jugador es un punto del color del lado con una línea hacia donde mira, sin armas ni equipamiento. Un punto rojo es su kill (en el lugar de la víctima), una cruz blanca, su muerte; lugares de granadas: humo — círculo gris, molotov — naranja, flash — anillo blanco, HE — anillo amarillo, plantado de C4 — cuadrado rosa.
-- **Subtítulo** — lo genera el código, sin red neuronal, a partir de la configuración de zonas del mapa (`cs2lens/maps/<map>.json`): la posición más estable del jugador (la zona fuera del spawn donde más a menudo está en el mismo momento de la ronda) y las granadas habituales (tipo y zona de aterrizaje, tiempo mediano, en al menos el 20% de las rondas, como máximo tres). Ejemplo: «Outside Tunnel a 1:50 en 5 de 10. Flash Lower Tunnel ~1:45 (2 de 10), molotov Short Stairs ~1:23 (2 de 10)». Los mapas sin configuración de zonas no tienen subtítulo. En modo equipo, solo granadas.
+- **Subtítulo** — lo genera el código, sin red neuronal, a partir de la configuración de zonas del mapa (`freezetime/maps/<map>.json`): la posición más estable del jugador (la zona fuera del spawn donde más a menudo está en el mismo momento de la ronda) y las granadas habituales (tipo y zona de aterrizaje, tiempo mediano, en al menos el 20% de las rondas, como máximo tres). Ejemplo: «Outside Tunnel a 1:50 en 5 de 10. Flash Lower Tunnel ~1:45 (2 de 10), molotov Short Stairs ~1:23 (2 de 10)». Los mapas sin configuración de zonas no tienen subtítulo. En modo equipo, solo granadas.
 - **Leyenda** de los símbolos.
 
 **Exportación** — siempre un archivo zip con dos archivos:
@@ -328,7 +330,7 @@ Página «Rival»: equipo, mapa, últimas N partidas, lado y tipo de ronda se el
 
 Pestaña de partida «Granadas y lineups» y página «Lineups» (lanzamientos de varias demos del mismo mapa). El enfoque de lineups y comandos de CS2 está tomado de [cs2-meta-engine](https://github.com/Twoos123/cs2-meta-engine).
 
-- **Lanzamiento** (`cs2lens/lineups.py`) — un `weapon_fire` de granada de `shots`: posición de los pies del lanzador, pitch/yaw en el momento del lanzamiento, tipo de granada. Se le asocia una trayectoria de `grenades` que empieza como mucho 32 ticks después, del mismo tipo y la más cercana al lanzador (en 9 demos se asociaron 3339 de 3349 lanzamientos, 99,7%). De ahí salen el punto donde se detuvo la granada y el tiempo hasta detenerse.
+- **Lanzamiento** (`freezetime/lineups.py`) — un `weapon_fire` de granada de `shots`: posición de los pies del lanzador, pitch/yaw en el momento del lanzamiento, tipo de granada. Se le asocia una trayectoria de `grenades` que empieza como mucho 32 ticks después, del mismo tipo y la más cercana al lanzador (en 9 demos se asociaron 3339 de 3349 lanzamientos, 99,7%). De ahí salen el punto donde se detuvo la granada y el tiempo hasta detenerse.
 - **Técnica** — según los fotogramas de repetición alrededor del lanzamiento: pies más de 8 unidades por encima del suelo antes del lanzamiento — salto; velocidad mayor de 170 unidades/s — carrera; mayor de 40 — andando; si no, quieto (`salto`, `carrera + salto`, `corriendo`, `andando`, `quieto`). En los lanzamientos con salto, el lineup guarda la altura del suelo desde la que se saltó. El agachado no se detecta: no está en los fotogramas de repetición.
 - **Lineup** — grupo de lanzamientos de la misma granada desde posiciones a menos de 64 unidades, con ángulo de mirada de ±8° y aterrizaje a menos de 160 unidades. El representante del grupo es el lanzamiento más cercano a los demás. Las zonas «desde» y «hacia» salen de la configuración del mapa.
 - **Filtros** — tipo, lado, equipo, jugador, técnica, zona de aterrizaje, número mínimo de lanzamientos en el lineup.
@@ -338,12 +340,12 @@ Pestaña de partida «Granadas y lineups» y página «Lineups» (lanzamientos d
 
 - **CSV** (UTF-8 con BOM, se abre en Excel) y **JSON** — todos los lanzamientos filtrados: partida, ronda, tiempo, jugador, equipo, lado, tipo, técnica, zonas, coordenadas de lanzamiento y aterrizaje, pitch/yaw, tiempo de vuelo y comando de consola listo.
 - **.cfg** — configuración de práctica: un lanzamiento por lineup, las teclas `]` / `[` cambian de lineup y al cambiar se escribe el nombre en la consola. Al principio, ajustes del servidor local: `sv_cheats 1`, granadas infinitas, vista previa de trayectoria (`sv_grenade_trajectory_prac_pipreview 1`), ronda de 60 minutos, sin freezetime, sin bots.
-- **Instalar en CS2** — la misma configuración se escribe directamente en `game/csgo/cfg` (`cs2lens_<nombre>.cfg`); **Ejecutar lista** carga el mapa y ejecuta `exec`.
+- **Instalar en CS2** — la misma configuración se escribe directamente en `game/csgo/cfg` (`freezetime_<nombre>.cfg`); **Ejecutar lista** carga el mapa y ejecuta `exec`.
 
-**Abrir en CS2** (`cs2lens/app/cs2.py`) coloca al jugador en la posición del lanzamiento: carga el mapa en un servidor local, activa los ajustes de práctica, teletransporta (`setpos`), apunta (`setang`) y da la granada (`give`, `use`).
+**Abrir en CS2** (`freezetime/app/cs2.py`) coloca al jugador en la posición del lanzamiento: carga el mapa en un servidor local, activa los ajustes de práctica, teletransporta (`setpos`), apunta (`setang`) y da la granada (`give`, `use`).
 
 - La carpeta del juego se encuentra sola, mediante el registro de Steam y `libraryfolders.vdf`; se puede indicar a mano en el bloque «CS2».
-- Las versiones actuales de CS2 ignoran `-netconport`, así que los comandos van por una tecla: escribe una vez en la consola del juego `bind f13 "exec cs2lens_cmd"` y la aplicación detecta el bind en las teclas guardadas del juego. Los comandos se escriben en `cfg/cs2lens_cmd.cfg` y se ejecutan pulsando F13. En el menú principal los binds no funcionan, así que al cargar una demo la aplicación escribe `exec cs2lens_cmd` en la consola por sí misma; antes la consola debe estar cerrada. Las teclas se envían como mensajes directamente a la ventana del juego (el juego no acepta `SendInput`: Windows lo rechaza) y solo mientras la ventana del juego está en primer plano. `con_logfile` no está disponible en el juego: el juego solo puede confirmar comandos con `-condebug` (escribe `csgo/console.log`); sin él la aplicación usa pausas medidas y vuelve a cargar el mapa o la demo en cada pulsación (unos 30 s), porque no sabe dónde está ahora el jugador. Con `-condebug`, una nueva pulsación en el mismo mapa o demo funciona al momento. La grabación es sin sonido.
+- Las versiones actuales de CS2 ignoran `-netconport`, así que los comandos van por una tecla: escribe una vez en la consola del juego `bind f13 "exec freezetime_cmd"` y la aplicación detecta el bind en las teclas guardadas del juego. Los comandos se escriben en `cfg/freezetime_cmd.cfg` y se ejecutan pulsando F13. En el menú principal los binds no funcionan, así que al cargar una demo la aplicación escribe `exec freezetime_cmd` en la consola por sí misma; antes la consola debe estar cerrada. Las teclas se envían como mensajes directamente a la ventana del juego (el juego no acepta `SendInput`: Windows lo rechaza) y solo mientras la ventana del juego está en primer plano. `con_logfile` no está disponible en el juego: el juego solo puede confirmar comandos con `-condebug` (escribe `csgo/console.log`); sin él la aplicación usa pausas medidas y vuelve a cargar el mapa o la demo en cada pulsación (unos 30 s), porque no sabe dónde está ahora el jugador. Con `-condebug`, una nueva pulsación en el mismo mapa o demo funciona al momento. La grabación es sin sonido.
 - Si CS2 no está abierto, el navegador lo lanza mediante `steam://run`; Steam pide confirmar los parámetros de lanzamiento. Sin la conexión configurada, el juego solo abrirá el mapa o la demo; el resto de comandos no tiene adónde ir.
 - **Copiar comando** — una línea `sv_cheats 1; setpos …; setang …; give …; use …` para la consola, si no necesitas la consola de red.
 - **demo en CS2** en cada lanzamiento abre la demo original (`playdemo`) 5 s antes del lanzamiento y cambia la cámara al lanzador (`spec_player`). Funciona si la demo está dentro de la carpeta del juego (por ejemplo, en `game/csgo`).

@@ -1,7 +1,7 @@
 import polars as pl
 import pytest
 
-from cs2lens.aggregate import SPECS, aggregate
+from freezetime.aggregate import SPECS, aggregate
 
 
 @pytest.fixture(scope="module")

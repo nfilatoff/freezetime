@@ -140,7 +140,7 @@ def load_match(directory: str | Path, extra_tables: tuple[str, ...] = ()) -> Mat
     names = [*BASE_TABLES, *extra_tables]
     missing = [t for t in names if not (directory / f"{t}.parquet").exists()]
     if missing:
-        raise FileNotFoundError(f"{directory}: missing {missing}; run `cs2lens extract` first")
+        raise FileNotFoundError(f"{directory}: missing {missing}; run `freezetime extract` first")
     files = (directory / "manifest.json", *(directory / f"{t}.parquet" for t in BASE_TABLES))
     base = _base_match(directory.resolve(), tuple(_stamp(f) for f in files))
     data = dict(base.data)  # a copy: callers may add tables of their own

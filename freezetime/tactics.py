@@ -1,6 +1,6 @@
 """Tactical analysis: T executes, CT setups and CT rotations.
 
-Positions are classified with the map config (``cs2lens.maps``): a point belongs to
+Positions are classified with the map config (``freezetime.maps``): a point belongs to
 site A when it is inside a zone of group ``A`` (the site and the CT positions around
 it), and so on. Maps without a config fall back to a heuristic: site centres are the
 mean plant positions in the demo (so both sites need a plant) and every radius is a
@@ -16,8 +16,8 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from cs2lens.context import Match, load_match, pct, with_round
-from cs2lens.maps import MapConfig, load_map_config
+from freezetime.context import Match, load_match, pct, with_round
+from freezetime.maps import MapConfig, load_map_config
 
 SITE_RADIUS = 0.20  # fallback only: "on the site" radius, as a fraction of the A-B distance
 DEFEND_RADIUS = 0.40  # fallback only: a CT closer than this to a site counts as holding it, else "mid"

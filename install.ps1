@@ -1,7 +1,7 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-Installs cs2lens (CS2 demo analyzer) and everything it needs: Git, Python, Node.js, the Python
+Installs Freezetime (CS2 demo analyzer) and everything it needs: Git, Python, Node.js, the Python
 environment, the built web app, awpy radar images and a desktop shortcut.
 
 .DESCRIPTION
@@ -13,8 +13,8 @@ winget. Re-running the script updates an existing installation (git pull, depend
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 
 .EXAMPLE
-irm https://raw.githubusercontent.com/nfilatoff/cs2lens/main/install.ps1 -OutFile install.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -InstallDir 'D:\cs2lens'
+irm https://raw.githubusercontent.com/nfilatoff/freezetime/main/install.ps1 -OutFile install.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -InstallDir 'D:\freezetime'
 
 .EXAMPLE
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -CheckOnly
@@ -25,8 +25,8 @@ ASCII source is intentional for Windows PowerShell 5.1.
 [CmdletBinding()]
 param(
     # Where to clone the project. Ignored when the script is run from inside a checkout.
-    [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'cs2lens'),
-    [string]$RepositoryUrl = 'https://github.com/nfilatoff/cs2lens.git',
+    [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'freezetime'),
+    [string]$RepositoryUrl = 'https://github.com/nfilatoff/freezetime.git',
     [string]$Branch = 'main',
     # Skip downloading awpy radar images and map data (~30 MB) into ~/.awpy.
     [switch]$SkipRadars,
@@ -43,6 +43,12 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $ProgressPreference = 'SilentlyContinue'
+
+# The project used to be called cs2lens: keep updating an old default install in place.
+$legacyDir = Join-Path $env:LOCALAPPDATA 'cs2lens'
+if (-not $PSBoundParameters.ContainsKey('InstallDir') -and -not (Test-Path $InstallDir) -and (Test-Path (Join-Path $legacyDir '.git'))) {
+    $InstallDir = $legacyDir
+}
 
 function Write-Step([string]$Text) { Write-Host "==> $Text" -ForegroundColor Cyan }
 function Write-Ok([string]$Text) { Write-Host "    $Text" -ForegroundColor Green }
@@ -143,8 +149,8 @@ else {
 }
 
 if ($CheckOnly) {
-    $venvOk = Test-Path (Join-Path $root '.venv\Scripts\cs2lens.exe')
-    $staticOk = Test-Path (Join-Path $root 'cs2lens\app\static\index.html')
+    $venvOk = Test-Path (Join-Path $root '.venv\Scripts\freezetime.exe')
+    $staticOk = Test-Path (Join-Path $root 'freezetime\app\static\index.html')
     $radarsOk = Test-Path (Join-Path $env:USERPROFILE '.awpy')
     Write-Host ("    Python environment: " + $(if ($venvOk) { 'ok' } else { 'not installed' }))
     Write-Host ("    Web app build:      " + $(if ($staticOk) { 'ok' } else { 'not built' }))
@@ -157,9 +163,13 @@ Write-Step 'Python environment (.venv)'
 $venvPython = Join-Path $root '.venv\Scripts\python.exe'
 if (-not (Test-Path $venvPython)) { Invoke-Native $python @('-m', 'venv', (Join-Path $root '.venv')) }
 Invoke-Native $venvPython @('-m', 'pip', 'install', '--quiet', '--upgrade', 'pip')
+if (Test-Path (Join-Path $root '.venv\Scripts\cs2lens.exe')) {
+    # the package before the rename; its command would point at a folder that no longer exists
+    Invoke-Native $venvPython @('-m', 'pip', 'uninstall', '--quiet', '--yes', 'cs2lens')
+}
 $target = if ($Dev) { "$root[dev]" } else { $root }
 Invoke-Native $venvPython @('-m', 'pip', 'install', '--quiet', '-e', $target)
-Write-Ok 'cs2lens and dependencies installed'
+Write-Ok 'Freezetime and dependencies installed'
 
 # ---------- 4. Web app ----------
 Write-Step 'Building the web app'
@@ -169,7 +179,7 @@ try {
     Invoke-Native npm.cmd @('run', 'build')
 }
 finally { Pop-Location }
-Write-Ok 'built into cs2lens\app\static'
+Write-Ok 'built into freezetime\app\static'
 
 # ---------- 5. Radars ----------
 if (-not $SkipRadars) {
@@ -180,28 +190,30 @@ if (-not $SkipRadars) {
 
 # ---------- 6. Launcher and shortcut ----------
 Write-Step 'Launcher'
-$launcher = Join-Path $root 'start-cs2lens.cmd'
+$launcher = Join-Path $root 'start-freezetime.cmd'
 @"
 @echo off
 cd /d "%~dp0"
 set PYTHONIOENCODING=utf-8
-".venv\Scripts\cs2lens.exe" app %*
+".venv\Scripts\freezetime.exe" app %*
 "@ | Set-Content -Path $launcher -Encoding ASCII
 Write-Ok $launcher
+Remove-Item -LiteralPath (Join-Path $root 'start-cs2lens.cmd') -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('Desktop')) 'cs2lens.lnk') -ErrorAction SilentlyContinue
 
 if (-not $NoShortcut) {
     $desktop = [Environment]::GetFolderPath('Desktop')
     $shell = New-Object -ComObject WScript.Shell
-    $lnk = $shell.CreateShortcut((Join-Path $desktop 'cs2lens.lnk'))
+    $lnk = $shell.CreateShortcut((Join-Path $desktop 'Freezetime.lnk'))
     $lnk.TargetPath = $launcher
     $lnk.WorkingDirectory = $root
     $lnk.Description = 'CS2 demo analyzer'
     $lnk.Save()
-    Write-Ok 'desktop shortcut cs2lens.lnk'
+    Write-Ok 'desktop shortcut Freezetime.lnk'
 }
 
 Write-Host ''
-Write-Host 'cs2lens is installed.' -ForegroundColor Green
+Write-Host 'Freezetime is installed.' -ForegroundColor Green
 Write-Host "Start it with the desktop shortcut or: $launcher"
 Write-Host 'The app opens at http://127.0.0.1:8000'
 

@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from cs2lens.app import hlae
-from cs2lens.app import recorder as rec
-from cs2lens.highlights import highlights, keep_ranges, kill_clips
+from freezetime.app import hlae
+from freezetime.app import recorder as rec
+from freezetime.highlights import highlights, keep_ranges, kill_clips
 
 
 def test_close_kills_are_not_cut():
@@ -59,9 +59,9 @@ def test_close_neighbours_share_a_game_run_without_seeking(tmp_path):
     b = clip(1140)  # records from 1204: its preroll begins during a's take
     assert hlae.session_batches([a, b]) == [[a, b]]
     cfgs = hlae.session_cfgs([a, b], tmp_path, ["-c:v", "x"], 60, [], [])
-    assert not any("gototick" in line for line in cfgs["cs2lens_hlae_0_end"])
+    assert not any("gototick" in line for line in cfgs["freezetime_hlae_0_end"])
     # its setup waits until the previous take has ended
-    assert 'mirv_cmd addAtTick 1193 "exec cs2lens_hlae_1_setup"' in cfgs["cs2lens_hlae_boot"]
+    assert 'mirv_cmd addAtTick 1193 "exec freezetime_hlae_1_setup"' in cfgs["freezetime_hlae_boot"]
 
 
 ffmpeg = rec.find_ffmpeg()

@@ -25,7 +25,7 @@ from pathlib import Path
 
 RELEASES = "https://api.github.com/repos/advancedfx/advancedfx/releases/latest"
 MAX_ZIP = 200 * 2**20
-CFG_PREFIX = "cs2lens_hlae"
+CFG_PREFIX = "freezetime_hlae"
 START_TICK = 128  # the first scheduled command: the demo is playing by then
 BOOT_WAIT = 90.0  # seconds for the game process to appear
 MIN_TAKE_GAP = 2  # ticks between the end of one take and the start of the next
@@ -39,8 +39,15 @@ SESSION_CVARS = {
 
 def default_dir() -> Path:
     base = os.environ.get("LOCALAPPDATA") or str(Path.home() / ".local" / "share")
-    # beside the project, not inside %LOCALAPPDATA%\cs2lens: install.ps1 clones into that folder and needs it empty
-    return Path(base) / "cs2lens-tools" / "hlae"
+    # beside the project, not inside %LOCALAPPDATA%\freezetime: install.ps1 clones into that folder and needs it empty
+    tools = Path(base) / "freezetime-tools"
+    old = Path(base) / "cs2lens-tools"  # the name before the project was renamed
+    if old.is_dir() and not tools.exists():
+        try:
+            old.rename(tools)
+        except OSError:  # held open (HLAE running): keep using the old folder this time
+            return old / "hlae"
+    return tools / "hlae"
 
 
 def find_hlae(folder: Path | None = None) -> Path | None:
@@ -51,13 +58,13 @@ def find_hlae(folder: Path | None = None) -> Path | None:
 
 
 def _fetch_json(url: str) -> dict:
-    req = urllib.request.Request(url, headers={"User-Agent": "cs2lens", "Accept": "application/vnd.github+json"})
+    req = urllib.request.Request(url, headers={"User-Agent": "freezetime", "Accept": "application/vnd.github+json"})
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.load(r)
 
 
 def _fetch_file(url: str, target: Path) -> None:
-    req = urllib.request.Request(url, headers={"User-Agent": "cs2lens"})
+    req = urllib.request.Request(url, headers={"User-Agent": "freezetime"})
     with urllib.request.urlopen(req, timeout=60) as r, target.open("wb") as f:
         shutil.copyfileobj(r, f)
 

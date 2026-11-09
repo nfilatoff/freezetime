@@ -5,8 +5,8 @@ import time
 import polars as pl
 import pytest
 
-from cs2lens.app.cs2 import INGAME, CS2Bridge, KeyConsole, NoConsole, steam_launch_url
-from cs2lens.lineups import cfg_name, console_string, list_cfg, safe_text, throws
+from freezetime.app.cs2 import INGAME, CS2Bridge, KeyConsole, NoConsole, steam_launch_url
+from freezetime.lineups import cfg_name, console_string, list_cfg, safe_text, throws
 
 
 def test_throws(dust2_mini):
@@ -26,9 +26,9 @@ def test_commands_are_safe():
     assert "quit" not in s  # an unknown weapon falls back to a smoke
     assert safe_text('a"; quit // x') == "a quit / x"
     cfg = list_cfg("de_dust2", "My list!", [lu, lu | {"weapon": "weapon_flashbang"}])
-    assert 'alias cs2lens_2 "setpos' in cfg and 'bind "]" "cs2lens_next"' in cfg
+    assert 'alias freezetime_2 "setpos' in cfg and 'bind "]" "freezetime_next"' in cfg
     assert cfg.count('"') % 2 == 0
-    assert cfg_name("My list!") == "cs2lens_my_list"
+    assert cfg_name("My list!") == "freezetime_my_list"
 
 
 def test_netcon_bridge(tmp_path):
@@ -137,7 +137,7 @@ def _fake_game(game, drop=0):
         pressed.append(_line)
         if len(pressed) <= drop:
             return
-        lines = (game / "cfg" / "cs2lens_cmd.cfg").read_text(encoding="utf-8").splitlines()
+        lines = (game / "cfg" / "freezetime_cmd.cfg").read_text(encoding="utf-8").splitlines()
         with (game / "console.log").open("a", encoding="utf-8") as log:
             for line in lines:
                 if line.startswith("echo "):
@@ -159,16 +159,16 @@ def test_key_console(tmp_path):
     press, pressed = _fake_game(game)
     con = KeyConsole(game, press, press, has_log=True)
     con.send("demo_pause", 'spec_player "ник"')
-    cfg = (game / "cfg" / "cs2lens_cmd.cfg").read_text(encoding="utf-8").splitlines()
-    assert cfg[0].startswith("echo cs2lens_ack_") and cfg[1:] == ["demo_pause", 'spec_player "ник"']
+    cfg = (game / "cfg" / "freezetime_cmd.cfg").read_text(encoding="utf-8").splitlines()
+    assert cfg[0].startswith("echo freezetime_ack_") and cfg[1:] == ["demo_pause", 'spec_player "ник"']
     assert pressed == [()]  # the key, not the console
     con.load("playdemo x")
-    assert pressed[1] == ("exec cs2lens_cmd",)  # typed: the bind does not fire in the main menu
+    assert pressed[1] == ("exec freezetime_cmd",)  # typed: the bind does not fire in the main menu
     assert con.wait_for(INGAME, 1)
 
 
 def test_key_console_retries_and_gives_up(tmp_path, monkeypatch):
-    monkeypatch.setattr("cs2lens.app.cs2.ACK_WAIT", 0.1)
+    monkeypatch.setattr("freezetime.app.cs2.ACK_WAIT", 0.1)
     game = _game_dir(tmp_path)
     press, pressed = _fake_game(game, drop=1)  # the first press is lost
     KeyConsole(game, press, press, has_log=True).send("x")
@@ -179,8 +179,8 @@ def test_key_console_retries_and_gives_up(tmp_path, monkeypatch):
 
 def test_key_console_without_log(tmp_path, monkeypatch):
     """A game without -condebug can't confirm anything: the key is pressed once, nothing is awaited."""
-    monkeypatch.setattr("cs2lens.app.cs2.BLIND_RUN", 0)
-    monkeypatch.setattr("cs2lens.app.cs2.BLIND_LOAD", 0)
+    monkeypatch.setattr("freezetime.app.cs2.BLIND_RUN", 0)
+    monkeypatch.setattr("freezetime.app.cs2.BLIND_LOAD", 0)
     game = _game_dir(tmp_path)
     pressed = []
     con = KeyConsole(game, lambda: pressed.append(1), lambda _: None, has_log=False)
@@ -204,7 +204,7 @@ class _FakeUser32:
 
 def test_keys_are_posted_to_the_game_window():
     """The game refuses SendInput while it is in front, so keys go straight to its window."""
-    from cs2lens.app import cs2
+    from freezetime.app import cs2
 
     u = _FakeUser32()
     cs2._tap(u, 7, 0x7C, 0x64)  # the bound F13
@@ -216,7 +216,7 @@ def test_keys_are_posted_to_the_game_window():
 
 
 def test_commands_after_settle_go_in_a_later_press(monkeypatch):
-    from cs2lens.app import cs2
+    from freezetime.app import cs2
 
     monkeypatch.setattr(cs2, "SETTLE_WAIT", 0)
     sent = []
@@ -233,14 +233,14 @@ def test_commands_after_settle_go_in_a_later_press(monkeypatch):
 
 
 def test_refused_key_is_an_error():
-    from cs2lens.app import cs2
+    from freezetime.app import cs2
 
     with pytest.raises(NoConsole):
         cs2._tap(_FakeUser32(accept=False), 7, 0x7C, 0x64)
 
 
 def test_tests_cannot_reach_the_game():
-    from cs2lens.app import cs2
+    from freezetime.app import cs2
 
     with pytest.raises(AssertionError):
         cs2.press_game_key()

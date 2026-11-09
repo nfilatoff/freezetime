@@ -1,5 +1,5 @@
 // One-time setup of the link with CS2: the player enters a key bind in the game console; the
-// app sees it in the game's saved keys (see cs2lens/app/cs2.py). Nothing is pressed in the game here.
+// app sees it in the game's saved keys (see freezetime/app/cs2.py). Nothing is pressed in the game here.
 import { useState } from "react";
 import { api } from "../api";
 import { t } from "../i18n";

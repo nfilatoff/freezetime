@@ -3,7 +3,7 @@ import shutil
 
 import polars as pl
 
-from cs2lens.context import alive_counts, load_match, round_context, with_man_diff, with_round
+from freezetime.context import alive_counts, load_match, round_context, with_man_diff, with_round
 
 ROUNDS = pl.DataFrame(
     {
@@ -49,7 +49,7 @@ def test_snapshot_offset(dust2_mini):
 
 
 def test_coach_is_not_a_player(dust2_mini, tmp_path):
-    from cs2lens.team_stats import team_stats
+    from freezetime.team_stats import team_stats
 
     d = tmp_path / "m"
     shutil.copytree(dust2_mini, d)

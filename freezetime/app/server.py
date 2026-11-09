@@ -1,4 +1,4 @@
-"""FastAPI backend of the cs2lens app: demo library, match pages, replay data, maps, aggregation.
+"""FastAPI backend of the Freezetime app: demo library, match pages, replay data, maps, aggregation.
 
 Every analysis comes from the existing modules (``team_stats``, ``tactics``, ``aggregate``,
 ``replay``); this layer only loads, caches and serialises. Results are cached in memory
@@ -24,21 +24,21 @@ from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from cs2lens.aggregate import aggregate
-from cs2lens.app.archives import is_archive, unpack
-from cs2lens.app.cs2 import BIND_COMMAND, SETTLE, CS2Bridge, NoConsole, game_running, steam_account
-from cs2lens.app import hlae
-from cs2lens.app.recorder import Clip, Recorder, find_ffmpeg, load_index, pick_encoder, save_index
-from cs2lens.app.jobs import JobQueue
-from cs2lens.context import alive_counts, load_match, round_context, with_man_diff, with_round
-from cs2lens.extract import add_replay, extract
-from cs2lens.highlights import add_custom, delete_custom, highlights, kill_clips, load_custom
-from cs2lens.lineups import MAP_RE, PRACTICE, cfg_name, lineup_cfg, lineup_commands, list_cfg, safe_text, throws
-from cs2lens.maps import available_maps, load_map_config
-from cs2lens.replay import round_payload
-from cs2lens.scout import MatchData, dossier, match_data, roster_suggestions, select_rounds, similar_rounds
-from cs2lens.tactics import tactics, userid_map, utility_events
-from cs2lens.team_stats import team_stats
+from freezetime.aggregate import aggregate
+from freezetime.app.archives import is_archive, unpack
+from freezetime.app.cs2 import BIND_COMMAND, SETTLE, CS2Bridge, NoConsole, game_running, steam_account
+from freezetime.app import hlae
+from freezetime.app.recorder import Clip, Recorder, find_ffmpeg, load_index, pick_encoder, save_index
+from freezetime.app.jobs import JobQueue
+from freezetime.context import alive_counts, load_match, round_context, with_man_diff, with_round
+from freezetime.extract import add_replay, extract
+from freezetime.highlights import add_custom, delete_custom, highlights, kill_clips, load_custom
+from freezetime.lineups import MAP_RE, PRACTICE, cfg_name, lineup_cfg, lineup_commands, list_cfg, safe_text, throws
+from freezetime.maps import available_maps, load_map_config
+from freezetime.replay import round_payload
+from freezetime.scout import MatchData, dossier, match_data, roster_suggestions, select_rounds, similar_rounds
+from freezetime.tactics import tactics, userid_map, utility_events
+from freezetime.team_stats import team_stats
 
 STATIC_DIR = Path(__file__).parent / "static"
 UPLOADS = "_uploads"
@@ -500,7 +500,7 @@ def create_app(out: str | Path = "out") -> FastAPI:
     jobs = JobQueue()
     cs2 = CS2Bridge(lib.setting, lib.set_setting)
     recorder = Recorder(cs2)
-    api = FastAPI(title="cs2lens")
+    api = FastAPI(title="Freezetime")
 
     @api.exception_handler(NoConsole)
     def no_console(_request: Request, e: NoConsole) -> JSONResponse:
@@ -866,9 +866,9 @@ def create_app(out: str | Path = "out") -> FastAPI:
     def cs2_open(map: str = Body(...), lineup: dict = Body(...), reload: bool = Body(False)) -> dict:
         """Teleport the player in CS2 to a lineup (loading the map, launching CS2 if needed)."""
         map_name, lu = check_map(map), check_lineup(lineup)
-        path = cs2.write_cfg("cs2lens_lineup", lineup_cfg(map_name, lu, lu["label"]))
+        path = cs2.write_cfg("freezetime_lineup", lineup_cfg(map_name, lu, lu["label"]))
         *place, select = lineup_commands(lu)  # the grenade can be selected only once the server has given it
-        commands = [c for c in PRACTICE if not c.startswith("//")] + place + [SETTLE, select, f"echo cs2lens: {lu['label']}"]
+        commands = [c for c in PRACTICE if not c.startswith("//")] + place + [SETTLE, select, f"echo freezetime: {lu['label']}"]
         return cs2.run(f"map {map_name}", commands, lu["label"] or "lineup", reload) | {"cfg": str(path) if path else None}
 
     @api.post("/api/cs2/list")

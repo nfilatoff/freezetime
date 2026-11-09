@@ -2,9 +2,9 @@
 console commands to the running game.
 
 Current CS2 builds ignore ``-netconport``, so commands normally go through a key: once, the
-player types ``bind f13 "exec cs2lens_cmd"`` in the console (the game saves binds). To send
-commands the app writes them to ``cfg/cs2lens_cmd.cfg`` and presses F13 in the game window.
-Binds do not fire in the main menu, so loading a demo types ``exec cs2lens_cmd`` into the
+player types ``bind f13 "exec freezetime_cmd"`` in the console (the game saves binds). To send
+commands the app writes them to ``cfg/freezetime_cmd.cfg`` and presses F13 in the game window.
+Binds do not fire in the main menu, so loading a demo types ``exec freezetime_cmd`` into the
 console instead. Keys are window messages posted to the game: with the game in front Windows
 refuses SendInput (error 5), and nothing else tells the app so. They are still sent only while
 the game window is in front. ``con_logfile`` is not available, so only a game started with
@@ -40,14 +40,14 @@ NO_CONSOLE = "cs2_no_console"  # no link was set up yet
 NO_ACK = "cs2_no_ack"  # the key was pressed but the game did not run the cfg
 NO_BIND = "cs2_no_bind"  # the bind is not in the game's saved keys
 NOT_FRONT = "cs2_not_front"  # the game window could not be brought to the front
-CMD_CFG = "cs2lens_cmd"
+CMD_CFG = "freezetime_cmd"
 WM_KEYDOWN, WM_KEYUP, WM_CHAR = 0x100, 0x101, 0x102
 SETTLE = ""  # in a command list: the commands after it need the effect of those before it
 SETTLE_WAIT = 0.4
 LEAVE_WAIT = 3.0  # seconds for the game to close a map or demo
 BIND_KEY = "f13"  # on no ordinary keyboard, so it can't clash with anything; no lock light either
 BIND_COMMAND = f'bind {BIND_KEY} "exec {CMD_CFG}"'
-BIND_SAVED = re.compile(r'"F13"\s+"exec cs2lens_cmd"', re.IGNORECASE)
+BIND_SAVED = re.compile(r'"F13"\s+"exec freezetime_cmd"', re.IGNORECASE)
 ACK_WAIT = 2.5  # seconds for the game to run the cfg after the key press
 ACK_TRIES = 2
 BLIND_RUN = 0.25  # without confirmations: seconds to let the game run the cfg
@@ -263,7 +263,7 @@ def user_cvars() -> dict[str, str]:
 
 
 class KeyConsole:
-    """Commands through ``cfg/cs2lens_cmd.cfg``: run by the bound key, or typed in the console to load
+    """Commands through ``cfg/freezetime_cmd.cfg``: run by the bound key, or typed in the console to load
     something from the main menu. Only a game started with ``-condebug`` can confirm them (a token in
     console.log); without it the app relies on measured waits."""
 
@@ -293,7 +293,7 @@ class KeyConsole:
 
     def _write(self, commands: tuple[str, ...]) -> str:
         self.seq += 1
-        token = f"cs2lens_ack_{self.run_id}_{self.seq}"
+        token = f"freezetime_ack_{self.run_id}_{self.seq}"
         cfg = self.dir / "cfg" / f"{CMD_CFG}.cfg"
         tmp = cfg.with_suffix(".tmp")
         # the token goes first: commands like playdemo block the game for a while once they start

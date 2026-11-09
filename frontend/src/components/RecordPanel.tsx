@@ -1,5 +1,5 @@
 // Automatic recording, like a clip service but on your own PC: the open CS2 plays the demo from the
-// player's eyes and the backend records the screen with ffmpeg, clip by clip (cs2lens/app/recorder.py).
+// player's eyes and the backend records the screen with ffmpeg, clip by clip (freezetime/app/recorder.py).
 import { useEffect, useRef, useState } from "react";
 import { api, cs2Error, recordingUrl, type Highlight, type MatchOverview, type Recording, type RecorderStatus } from "../api";
 import { ConsoleSetup } from "./ConsoleSetup";

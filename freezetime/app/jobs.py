@@ -31,7 +31,7 @@ class JobQueue:
         self._ids = itertools.count(1)
         self._queue: Queue[tuple[Job, Callable]] = Queue()
         self._lock = threading.Lock()
-        threading.Thread(target=self._work, daemon=True, name="cs2lens-jobs").start()
+        threading.Thread(target=self._work, daemon=True, name="freezetime-jobs").start()
 
     def submit(self, kind: str, target: str, match_id: str, fn: Callable[[Callable[[float, str], None]], None]) -> Job:
         """Queue ``fn(progress)`` unless the same work is already queued or running."""

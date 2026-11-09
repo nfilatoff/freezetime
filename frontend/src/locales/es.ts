@@ -508,7 +508,7 @@ export const es: Record<Key, Entry> = {
   "sum.plant": "{label}  {clock}  {player} — plant {site}",
   "sum.capPos": "{zone} a las {clock} en {n} de {N}",
   "sum.capNade": "{nade} {zone} ~{clock} ({n} de {N})",
-  "sum.header": "Clip de cs2lens — {name} · {sides} · {map}",
+  "sum.header": "Clip de Freezetime — {name} · {sides} · {map}",
   "sum.player": "Jugador: {name} ({team})",
   "sum.team": "Equipo: {name}",
   "sum.mapLine": "Mapa: {map} · bando: {sides} · compra: {buy}",
@@ -536,7 +536,7 @@ export const es: Record<Key, Entry> = {
   "sum.byRound": "Por ronda:",
   "sum.roundLine": "{label} vs {opp} · {side} · {buy} · {result} · bajas {k}, muertes {d}",
   "sum.roundNades": "granadas: {list}",
-  "sum.footer": "El tiempo es el reloj de la ronda (1:55 = fin del tiempo de compra). Las zonas son callouts de la config de mapas de cs2lens.",
+  "sum.footer": "El tiempo es el reloj de la ronda (1:55 = fin del tiempo de compra). Las zonas son callouts de la config de mapas de Freezetime.",
 
   // ---- highlights ----
   "hl.kind.ace": "Ace",
@@ -590,7 +590,7 @@ export const es: Record<Key, Entry> = {
   "rec.encoder": "códec {enc}",
   "rec.account": "tú: {name}",
   "rec.me": "tú",
-  "rec.noFfmpeg": "No se encontró ffmpeg: instálalo (winget install Gyan.FFmpeg) y reinicia cs2lens.",
+  "rec.noFfmpeg": "No se encontró ffmpeg: instálalo (winget install Gyan.FFmpeg) y reinicia Freezetime.",
   "rec.checked": "marcadas ({n})",
   "rec.kills": "todas las bajas de",
   "rec.capture": "captura",

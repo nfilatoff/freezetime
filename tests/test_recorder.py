@@ -3,8 +3,8 @@ import subprocess
 
 import pytest
 
-from cs2lens.app import recorder as rec
-from cs2lens.app.cs2 import CS2Bridge, NoConsole
+from freezetime.app import recorder as rec
+from freezetime.app.cs2 import CS2Bridge, NoConsole
 from tests.test_lineups import _fake_cs2, _wait
 
 ffmpeg = rec.find_ffmpeg()

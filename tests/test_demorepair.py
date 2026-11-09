@@ -5,8 +5,8 @@ import json
 import pytest
 from awpy import InvalidDemoError
 
-from cs2lens import demorepair, extract as extract_module
-from cs2lens.demorepair import _encode_varint as v, _fields, _repair_stream, _snappy, repair_demo
+from freezetime import demorepair, extract as extract_module
+from freezetime.demorepair import _encode_varint as v, _fields, _repair_stream, _snappy, repair_demo
 
 BAD = b"\x90\xeeP\x96@\x05"
 

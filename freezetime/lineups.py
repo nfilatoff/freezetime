@@ -16,8 +16,8 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from cs2lens.context import Match, load_match, with_round
-from cs2lens.maps import load_map_config
+from freezetime.context import Match, load_match, with_round
+from freezetime.maps import load_map_config
 
 WEAPON_TYPE = {
     "weapon_smokegrenade": "smoke",
@@ -196,15 +196,15 @@ PRACTICE = [
 
 
 def lineup_cfg(map_name: str, lineup: dict, label: str) -> str:
-    """``cs2lens_lineup.cfg``: practice settings, then teleport to one lineup."""
+    """``freezetime_lineup.cfg``: practice settings, then teleport to one lineup."""
     lines = [
-        "// cs2lens - one grenade lineup",
-        f"// Map: {map_name}. Run on a local server:  exec cs2lens_lineup",
+        "// freezetime - one grenade lineup",
+        f"// Map: {map_name}. Run on a local server:  exec freezetime_lineup",
         "",
         *PRACTICE,
         "",
         *lineup_commands(lineup),
-        f"echo cs2lens: {safe_text(label)}",
+        f"echo freezetime: {safe_text(label)}",
     ]
     return "\n".join(lines) + "\n"
 
@@ -215,7 +215,7 @@ def list_cfg(map_name: str, name: str, lineups: list[dict], next_key: str = "]",
     if not n:
         raise ValueError("no lineups")
     lines = [
-        f"// cs2lens - {n} grenade lineups on {map_name}: {safe_text(name)}",
+        f"// freezetime - {n} grenade lineups on {map_name}: {safe_text(name)}",
         f"// 1. Start a local server:  map {map_name}",
         f"// 2. In the console:  exec {cfg_name(name)}",
         f"// 3. {next_key} - next lineup, {prev_key} - previous lineup",
@@ -228,15 +228,15 @@ def list_cfg(map_name: str, name: str, lineups: list[dict], next_key: str = "]",
         body = "; ".join([
             *lineup_commands(lu),
             f"echo [{i}/{n}] {safe_text(lu.get('label'))}",
-            f"alias cs2lens_next cs2lens_{nxt}",
-            f"alias cs2lens_prev cs2lens_{prv}",
+            f"alias freezetime_next freezetime_{nxt}",
+            f"alias freezetime_prev freezetime_{prv}",
         ])
-        lines.append(f'alias cs2lens_{i} "{body}"')
-    lines += ["", f'bind "{next_key}" "cs2lens_next"', f'bind "{prev_key}" "cs2lens_prev"', "cs2lens_1", ""]
+        lines.append(f'alias freezetime_{i} "{body}"')
+    lines += ["", f'bind "{next_key}" "freezetime_next"', f'bind "{prev_key}" "freezetime_prev"', "freezetime_1", ""]
     return "\n".join(lines)
 
 
 def cfg_name(name: str) -> str:
-    """``cs2lens_<slug>``: the file name (without .cfg) and the ``exec`` argument."""
+    """``freezetime_<slug>``: the file name (without .cfg) and the ``exec`` argument."""
     slug = re.sub(r"[^a-z0-9_]+", "_", (name or "list").lower()).strip("_")[:40] or "list"
-    return f"cs2lens_{slug}"
+    return f"freezetime_{slug}"

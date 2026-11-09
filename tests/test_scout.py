@@ -4,10 +4,10 @@ import shutil
 import polars as pl
 import pytest
 
-from cs2lens.aggregate import aggregate
-from cs2lens.app.server import _points, _scouted_points, create_app
-from cs2lens.context import load_match
-from cs2lens.scout import dossier, match_data, roster_suggestions, select_rounds, similar_rounds
+from freezetime.aggregate import aggregate
+from freezetime.app.server import _points, _scouted_points, create_app
+from freezetime.context import load_match
+from freezetime.scout import dossier, match_data, roster_suggestions, select_rounds, similar_rounds
 
 
 @pytest.fixture(scope="module")
@@ -83,7 +83,7 @@ def test_dossier_is_json_and_counts_add_up(data, team):
     by_buy = report["economy"]["by_buy"]
     assert by_buy["rounds"].sum() == sample["rounds"]
     assert by_buy["wins"].sum() == sample["wins"]
-    from cs2lens.app.server import _json_ready
+    from freezetime.app.server import _json_ready
 
     json.dumps(_json_ready(report), allow_nan=False)
 
@@ -293,8 +293,8 @@ def test_executes_by_buy_in_tactics_and_aggregate(dust2_mini):
 
 
 def test_movement_context_filters_split_the_positions(dust2_mini):
-    from cs2lens.app.server import _map_meta, _movement
-    from cs2lens.app.server import awpy_data
+    from freezetime.app.server import _map_meta, _movement
+    from freezetime.app.server import awpy_data
 
     if not awpy_data.local_versions():
         pytest.skip("no awpy-data cache")

@@ -19,7 +19,7 @@ from pathlib import Path
 
 import polars as pl
 
-from cs2lens.context import Match, load_match
+from freezetime.context import Match, load_match
 
 FORMAT = 4  # bump when the document changes; old cache files are then ignored
 PRE_FREEZE_SEC = 20.0  # replay starts at most this long before freeze end

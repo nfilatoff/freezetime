@@ -4,7 +4,7 @@ import zipfile
 
 import pytest
 
-from cs2lens.app.archives import DEMO_MAGIC, is_archive, unpack
+from freezetime.app.archives import DEMO_MAGIC, is_archive, unpack
 
 DEMO = DEMO_MAGIC + b"payload"
 

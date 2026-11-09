@@ -513,7 +513,7 @@ export const ru: Record<Key, Entry> = {
   "sum.plant": "{label}  {clock}  {player} — плант {site}",
   "sum.capPos": "{zone} на {clock} в {n} из {N}",
   "sum.capNade": "{nade} {zone} ~{clock} ({n} из {N})",
-  "sum.header": "Клип cs2lens — {name} · {sides} · {map}",
+  "sum.header": "Клип Freezetime — {name} · {sides} · {map}",
   "sum.player": "Игрок: {name} ({team})",
   "sum.team": "Команда: {name}",
   "sum.mapLine": "Карта: {map} · сторона: {sides} · закуп: {buy}",
@@ -541,7 +541,7 @@ export const ru: Record<Key, Entry> = {
   "sum.byRound": "По раундам:",
   "sum.roundLine": "{label} против {opp} · {side} · {buy} · {result} · фраги {k}, смерти {d}",
   "sum.roundNades": "гранаты: {list}",
-  "sum.footer": "Время — часы раунда (1:55 = конец фризтайма). Зоны — callouts из конфига карты cs2lens.",
+  "sum.footer": "Время — часы раунда (1:55 = конец фризтайма). Зоны — callouts из конфига карты Freezetime.",
 
   // ---- highlights ----
   "hl.kind.ace": "Эйс",
@@ -595,7 +595,7 @@ export const ru: Record<Key, Entry> = {
   "rec.encoder": "кодек {enc}",
   "rec.account": "вы: {name}",
   "rec.me": "вы",
-  "rec.noFfmpeg": "ffmpeg не найден: установите его (winget install Gyan.FFmpeg) и перезапустите cs2lens.",
+  "rec.noFfmpeg": "ffmpeg не найден: установите его (winget install Gyan.FFmpeg) и перезапустите Freezetime.",
   "rec.checked": "отмеченные ({n})",
   "rec.kills": "все киллы игрока",
   "rec.capture": "захват",
