@@ -25,6 +25,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from freezetime.aggregate import aggregate
+from freezetime.board import BoardError, create_board, delete_board, list_boards, load_board, update_board
 from freezetime.app.archives import is_archive, unpack
 from freezetime.app.cs2 import BIND_COMMAND, SETTLE, CS2Bridge, NoConsole, game_running, steam_account
 from freezetime.app import hlae
@@ -921,6 +922,47 @@ def create_app(out: str | Path = "out") -> FastAPI:
         clean = re.sub(r'["\n\r;]|//', " ", name).strip()[:64]
         return f'spec_player "{clean}"'
 
+    @api.get("/api/boards")
+    def boards(map: str | None = None) -> list[dict]:
+        """Saved tactics boards (summaries), optionally of one map."""
+        return list_boards(lib.out, map)
+
+    @api.get("/api/boards/{board_id}")
+    def board_get(board_id: str) -> dict:
+        try:
+            b = load_board(lib.out, board_id)
+        except BoardError as e:
+            raise HTTPException(400, str(e)) from e
+        if b is None:
+            raise HTTPException(404, f"no board {board_id}")
+        return b
+
+    @api.post("/api/boards")
+    def board_create(board: dict = Body(...)) -> dict:
+        try:
+            return create_board(lib.out, board)
+        except BoardError as e:
+            raise HTTPException(400, str(e)) from e
+
+    @api.put("/api/boards/{board_id}")
+    def board_update(board_id: str, board: dict = Body(...)) -> dict:
+        try:
+            b = update_board(lib.out, board_id, board)
+        except BoardError as e:
+            raise HTTPException(400, str(e)) from e
+        if b is None:
+            raise HTTPException(404, f"no board {board_id}")
+        return b
+
+    @api.delete("/api/boards/{board_id}")
+    def board_delete(board_id: str) -> dict:
+        try:
+            if not delete_board(lib.out, board_id):
+                raise HTTPException(404, f"no board {board_id}")
+        except BoardError as e:
+            raise HTTPException(400, str(e)) from e
+        return {"deleted": board_id}
+
     @api.get("/api/maps")
     def map_list() -> list[str]:
         """Maps with a config."""
@@ -1088,6 +1130,14 @@ def create_app(out: str | Path = "out") -> FastAPI:
         return JSONResponse({"tables": tables(result), "warnings": [str(w.message) for w in caught]})
 
     if STATIC_DIR.exists():
+        @api.middleware("http")
+        async def fresh_index(request: Request, call_next):
+            """The page must be checked on every load: after an update it names new hashed bundles."""
+            response = await call_next(request)
+            if request.url.path in ("/", "/index.html"):
+                response.headers["Cache-Control"] = "no-cache"
+            return response
+
         api.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
     else:
         @api.get("/")

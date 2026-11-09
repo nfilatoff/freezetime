@@ -20,6 +20,7 @@ Features:
 - **Recording via HLAE** — the "HLAE (with sound)" mode in the same panel: the app closes a running CS2 (after confirmation), launches the game via [HLAE](https://github.com/advancedfx/advancedfx) with `-insecure`, records clips with sound exactly by ticks (`mirv_cmd addAtTick`, `mirv_streams`) and closes the game (`quit`). No keys are pressed, the game can stay in the background, no bind or `gameinfo.gi` edits are needed. HLAE is installed with a button in the app from official releases with a SHA-256 check into `%LOCALAPPDATA%\freezetime-tools\hlae`. A game launched via HLAE cannot join VAC servers.
 - **Pause cutting** — while recording, gaps between kills longer than a threshold (3 s by default) are removed: in "all kills" mode such kills become separate clips, while a highlight stays one video that jumps to the next kill, together with the sound.
 - **Interface languages** — English, Russian and Spanish. English by default; if the browser or Windows language is Russian or Spanish, that language is used. The choice in the sidebar is remembered in the browser.
+- **Tactics board** — draw a tactic on any pool map in up to 4 steps (default, utility, entry, post-plant): CT/T players and C4 dragged from the toolbar, 6 grenades with their real radius and a throw point, pencil, arrows, shapes and text stickers. Dragging a player on a later step records the route they walk, and playback animates the players along their routes. Undo/redo, rebindable hotkeys, saved tactics with a map filter, export to PNG (one step or all steps in a grid), GIF and MP4. The "To board" button in the replay copies the current moment (players with names, smokes, fires, the bomb), and the board can take you back to that moment.
 
 | Match overview | Tactics | Maps |
 |---|---|---|
@@ -150,6 +151,7 @@ Tests: `pytest`. The fixture is rounds 1–8 of one Dust2 match, built by `tests
 | `out/<name>/` | `freezetime batch` result. |
 | `out/maps/` | `freezetime viz zones` renders. |
 | `out/library.json` | App settings: demo folders, CS2 folder and network console port, team names (`team_aliases`), own team (`own_team`). |
+| `out/boards/<id>.json` | Saved tactics boards. |
 | `<CS2>/game/csgo/cfg/freezetime_*.cfg` | Lineups and practice lists written by the "Open in CS2" and "Install in CS2" buttons. |
 | `out/_uploads/` | Demos uploaded through the app (and extracted from archives). |
 | `~/.awpy/<version>/` | awpy cache: radars (`radars/*.png`) and `map_data.json` (coordinate transform, levels). |
@@ -209,6 +211,7 @@ Maps outside the pool (Overpass, Train, Vertigo, …) have no config. `tactics` 
 | `aggregate.py` | Aggregation across matches, team aliases. |
 | `scout.py` | Opponent dossier: per-round match tables (`match_data`), selecting a team's rounds (`select_rounds`), report and insights (`dossier`), similar rounds, teams with a shared roster. |
 | `replay.py` | Round replay document (JSON, gzip cache). |
+| `board.py` | Tactics boards: checking, storing and listing `out/boards/<id>.json`. |
 | `viz.py` | Images over the radar (matplotlib via `awpy.plot`), per-level panels. |
 | `report.py` | Markdown reports. |
 | `cli.py` | `freezetime` commands. |
@@ -218,6 +221,7 @@ Maps outside the pool (Overpass, Train, Vertigo, …) have no config. `tactics` 
 | `app/cs2.py` | CS2 link: finding the game folder, writing `.cfg`, network console (`-netconport`), launching via Steam. |
 | `frontend/` | React + TypeScript + Vite. The replay and clips are drawn on Canvas 2D. |
 | `frontend/src/replayDraw.ts` | Shared by replay and clips: round cache, interpolation, player state with inventory, player icon, tracers, death crosses, grenades. |
+| `frontend/src/board.ts`, `pages/Board.tsx` | Tactics board: model (steps, tokens with routes, marks), drawing, playback, replay frame → board; the editor page. |
 | `frontend/src/components/ClipView.tsx`, `clipExport.ts` | Clip builder, frame layout, GIF (gifenc) and MP4 (WebCodecs + mp4-muxer) encoding, zip (fflate). |
 | `frontend/src/clipSummary.ts`, `zones.ts` | Clip facts: zone of a point (by map config), caption and text file. |
 | `frontend/src/heat.ts`, `components/MapsView.tsx` | Heatmap: accumulation on a 256×256 grid, blur, palettes, modes and filters. |
@@ -305,6 +309,21 @@ Filters: team, side, player, weapon (for kills, shooting and damage — for exam
 ### App: position names
 
 The "positions" toggle overlays zone names from the map config onto the radar: in the replay, Heatmap, lineups and player starting positions. Three modes: off, names, names and zone borders. The mode is shared and remembered in the browser. In the clip builder it's a separate layer, because it ends up in the final video; its look follows the shared mode, and when the shared mode is off the layer draws names and borders. Highlight videos have no names. The "Positions" page shows all pool maps without demos and has its own toggle; hovering a name in the list highlights the zone in any mode. The names are the same ones the game shows next to the player on the radar (`m_szLastPlaceName`).
+
+### App: tactics board
+
+The "Board" page (`#/board`, `freezetime/board.py`, `frontend/src/board.ts`, `pages/Board.tsx`) is a whiteboard on the map radar for drawing a tactic and showing it to the team.
+
+- **Steps** — up to 4: default, utility, entry, post-plant (double-click to rename). Grenades, drawings and texts belong to one step; the "previous step" checkbox shows the step before faded.
+- **Players and the bomb** — drag CT, T or C4 from the toolbar onto the map (a click drops it in the middle). A player keeps their position on the next steps until moved. Dragging a player on steps 2–4 records the way they walk: that is their route, drawn as a dotted line with an arrow. "Clear path" makes it straight again, "Stay put" keeps the player where they were. Double-click renames a player.
+- **Grenades** — smoke, molotov, incendiary, flashbang, HE and decoy are drawn with the radius the replay uses (smoke 144 units, fire 110). A selected grenade has an orange handle: drag it to where the grenade is thrown from, and the throw is drawn as an arc.
+- **Drawing** — pencil (5 colours, 3 widths), arrow (Shift snaps to 45°), rectangle and ellipse (Shift makes a square or a circle), text sticker, eraser. Right click deletes whatever is under the cursor.
+- **Multi-level maps** — on Nuke both levels are shown side by side (or one of them); a player can be dragged from one level to the other.
+- **Playback** — "Play" (Space) holds each step and walks the players along their routes to the next one; the step's utility fades in.
+- **Hotkeys** — V select, P pencil, A arrow, R rectangle, C ellipse, T text, E eraser, Space play, O previous step, Q/W step back/forward, 1–4 steps, Ctrl+Z / Ctrl+Shift+Z undo/redo, Del delete. The tool keys can be rebound in "Hotkeys" and are remembered in the browser.
+- **Saving** — "Save" writes `out/boards/<id>.json` (format version inside), "Update" overwrites the loaded tactic, "Save as new" makes a copy. The list on the right shows the tactics of the map (or all maps). An unsaved board survives a page reload.
+- **Export** — PNG of the current step or of all steps in a grid with a caption, GIF or MP4 of the playback (good for Discord).
+- **From the replay** — "⧉ To board" in the replay copies the current moment to step 1: alive players with names and sides, smokes, fires and the bomb. "Board" opens an empty board of the same map. Both remember the moment, and "◀ Back to replay" returns to the same round and second.
 
 ### App: opponent (dossier)
 
@@ -418,3 +437,9 @@ A point is looked up among the polygons of its level (by `z`). If zones overlap,
 - **Lineups**: the position is the thrower's feet at the moment of the throw (for a jump — the ground before the jump), so for running and jump throws the start point shows where the grenade left the hand, and you have to repeat the run-up yourself. Throw strength (left/right button) and crouching aren't detected.
 - **CS2 network console** was tested on an emulator: commands, order, waiting for the `CS2_GAME_UI_STATE_INGAME` line after loading a map. If the game doesn't print this line, the commands go out after 90 s of waiting.
 - **Coaches** are detected by a zero row in `stats`; a coach who actually played rounds counts as a player.
+
+## License
+
+Freezetime is source-available, not open source. You may read the code and run the unmodified app for non-commercial
+purposes (for yourself or your team). Commercial use, modification, copying, redistribution and derivative works are
+not allowed without the author's written permission. See [LICENSE](LICENSE) for the full terms.

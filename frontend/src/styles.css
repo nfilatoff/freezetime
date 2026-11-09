@@ -420,6 +420,65 @@ code.console { font-size: 11px; background: var(--bg); border: 1px solid var(--l
 .callout-list .zone-chips span.on { background: var(--accent); color: var(--accent-ink); }
 .print-only { display: none; }
 
+/* ---------- Tactics board ---------- */
+.board-page { padding-bottom: 32px; }
+.board-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.board-head h1 { margin-right: 6px; }
+.board-name { width: 260px; font-weight: 600; }
+.board-layout { display: flex; gap: 16px; align-items: flex-start; }
+.board-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.board-steps { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.board-step { padding: 6px 12px; font-weight: 500; }
+.board-step b { color: var(--muted); margin-right: 4px; font-family: var(--head); }
+.board-step.on { border-color: var(--accent); background: var(--accent-dim); }
+.board-step.on b { color: var(--accent); }
+.board-stage { display: flex; justify-content: center; user-select: none; }
+.board-stage canvas { display: block; border-radius: 10px; border: 1px solid var(--line); }
+.board-edit {
+  position: absolute; z-index: 3; width: 180px; font: 600 13px/1.35 system-ui, sans-serif;
+  background: rgba(12, 12, 12, 0.94); border-color: var(--accent); resize: none; padding: 6px 8px;
+}
+.board-toolbar, .board-selection, .board-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.board-toolbar { padding: 8px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.board-toolbar .seg button { padding: 5px 8px; display: inline-flex; align-items: center; }
+.board-colors { display: inline-flex; gap: 5px; }
+.board-colors button { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 2px solid #000; }
+.board-colors button.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+.board-width { display: block; width: 18px; background: currentColor; border-radius: 3px; }
+.board-sep { width: 1px; height: 24px; background: var(--line2); }
+.board-tokens { display: inline-flex; gap: 6px; }
+.board-token, .board-nade {
+  display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%;
+  font: 700 11px var(--head); cursor: grab; user-select: none; border: 2px solid #000; color: #111;
+}
+.board-token:active, .board-nade:active { cursor: grabbing; }
+.board-token.bomb { border-radius: 5px; background: #ff3030; color: #fff; width: 34px; height: 24px; }
+.board-nade { background: rgba(0, 0, 0, 0.35); border-width: 2px; border-style: solid; }
+.board-token:hover, .board-nade:hover { filter: brightness(1.15); transform: translateY(-1px); }
+.board-selection { padding: 6px 10px; background: var(--bg2); border: 1px dashed var(--line2); border-radius: 8px; }
+.board-selection input { width: 140px; padding: 4px 8px; }
+.board-selection button { padding: 4px 10px; font-size: 12px; }
+.board-keys { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 16px; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.board-keys label { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; }
+.board-keys button { min-width: 64px; padding: 3px 8px; font-size: 12px; }
+.board-keys button.on { border-color: var(--accent); color: var(--accent); }
+.board-keys kbd { font: 12px ui-monospace, Consolas, monospace; color: var(--muted); }
+.board-side { width: 260px; flex: none; position: sticky; top: 72px; max-height: calc(100vh - 90px); display: flex; flex-direction: column; gap: 8px; }
+.board-side-head { display: flex; align-items: baseline; justify-content: space-between; }
+.board-side-head h3 { margin: 4px 0; }
+.board-author { display: flex; flex-direction: column; gap: 4px; }
+.board-author input { padding: 5px 8px; }
+.board-list { overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+.board-item { position: relative; padding: 8px 34px 8px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.board-item:hover { border-color: #444; }
+.board-item.on { border-color: var(--accent); }
+.board-item-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-item .card-del { top: 6px; right: 6px; }
+@media (max-width: 1100px) {
+  .board-layout { flex-direction: column; }
+  .board-side { width: 100%; position: static; max-height: none; }
+}
+
 @media print {
   :root { color-scheme: light; }
   body { background: #fff; color: #000; font-size: 11px; }

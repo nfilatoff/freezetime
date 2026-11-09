@@ -32,3 +32,6 @@ export const IconMap = () => (
 export const IconStar = () => (
   <svg {...base}><path d="M12 3l2.7 5.6 6.1.8-4.5 4.2 1.1 6-5.4-2.9-5.4 2.9 1.1-6-4.5-4.2 6.1-.8z" /></svg>
 );
+export const IconBoard = () => (
+  <svg {...base}><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8" cy="9" r="1.6" /><path d="M14 8l3 3M17 8l-3 3M8 13c1 3 4 4 8 3" /><path d="M14.5 14.5L16 16l-1.8.6" /></svg>
+);

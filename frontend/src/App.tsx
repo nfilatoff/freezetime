@@ -7,9 +7,10 @@ import { AggregatePage } from "./pages/Aggregate";
 import { HighlightsPage } from "./pages/Highlights";
 import { CalloutsPage } from "./pages/Callouts";
 import { ScoutPage } from "./pages/Scout";
+import { BoardPage } from "./pages/Board";
 import { ClipView } from "./components/ClipView";
 import { LineupsView } from "./components/LineupsView";
-import { IconLibrary, IconLogo, IconMap, IconScout, IconStar, IconUs } from "./components/Icons";
+import { IconBoard, IconLibrary, IconLogo, IconMap, IconScout, IconStar, IconUs } from "./components/Icons";
 import { LANGS, detectSystemLang, setLang, t, useLang, type Key, type Lang } from "./i18n";
 
 function useHash(): string[] {
@@ -35,6 +36,7 @@ export function App() {
     ["", "nav.library", IconLibrary],
     ["scout", "nav.scout", IconScout],
     ...(us ? [[us, "nav.us", IconUs] as [string, Key, typeof IconLibrary]] : []),
+    ["board", "nav.board", IconBoard],
     ["highlights", "nav.highlights", IconStar],
     ["callouts", "nav.callouts", IconMap],
   ];
@@ -70,6 +72,8 @@ export function App() {
         <main key={lang}>
           {page === "match" && rest[0] ? (
             <MatchPage id={rest[0]} tab={rest[1] ?? "overview"} round={rest[2] ? Number(rest[2]) : undefined} at={rest[3] ? Number(rest[3]) : undefined} />
+          ) : page === "board" ? (
+            <BoardPage id={rest[0]} />
           ) : page === "callouts" ? (
             <CalloutsPage map={rest[0]} />
           ) : page === "scout" ? (

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MatchOverview, Replay } from "../api";
 import { go } from "../router";
+import { boardFromFrame, emptyBoard, stashDraft } from "../board";
 import { CT_COLOR, RADAR_SIZE, T_COLOR, levelLabel, levelOf, panelLevels, sideColor, sideShort, useMapAssets, worldToPx } from "../radar";
 import {
   BOMB_TIME, NADE_COLORS, ROUND_TIME, bombState, drawRound, fmtClock, frameAt, killAt, loadReplay, playerStates, weaponName, type PlayerState,
@@ -259,6 +260,30 @@ export function ReplayView({ match, round, at }: { match: MatchOverview; round: 
               onClick={() => go("match", match.id, "highlights", round, Math.round((tickRef.current - data.freeze_end_tick) / data.tick_rate))}
             >
               {t("replay.addHighlight")}
+            </button>
+            <button
+              title={t("replay.toBoardTitle")}
+              disabled={!assets}
+              onClick={() => {
+                if (!assets) return;
+                setPlaying(false);
+                const sec = Math.round(((tickRef.current - data.freeze_end_tick) / data.tick_rate) * 10) / 10;
+                stashDraft(boardFromFrame(assets.meta, data, tickRef.current, { match: match.id, round, sec }));
+                go("board", "draft");
+              }}
+            >
+              {t("replay.toBoard")}
+            </button>
+            <button
+              title={t("replay.openBoardTitle")}
+              onClick={() => {
+                setPlaying(false);
+                const sec = Math.round(((tickRef.current - data.freeze_end_tick) / data.tick_rate) * 10) / 10;
+                stashDraft({ ...emptyBoard(match.map), source: { match: match.id, round, sec } });
+                go("board", "draft");
+              }}
+            >
+              {t("replay.openBoard")}
             </button>
             <span className="muted small hotkeys">
               {t("replay.hotkeys")}

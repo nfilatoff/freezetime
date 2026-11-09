@@ -456,6 +456,57 @@ export interface Replay {
   shots: { tick: number[]; player: string[]; x: number[]; y: number[]; yaw: number[]; hx: (number | null)[]; hy: (number | null)[] };
 }
 
+// ---- tactics boards (freezetime/board.py); coordinates are radar px of level `l` ----
+export interface BoardPos { x: number; y: number; l: number }
+export type NadeKind = "smoke" | "molotov" | "incendiary" | "flashbang" | "he" | "decoy";
+/** A player or the bomb: one position per step (null = where it was on the step before) and the route into each step. */
+export interface BoardToken {
+  id: string;
+  type: "player" | "bomb";
+  side?: "ct" | "t";
+  label?: string;
+  pos: (BoardPos | null)[];
+  route: BoardPos[][];
+}
+export type MarkType = "nade" | "pen" | "arrow" | "rect" | "circle" | "text";
+/** Something drawn on one step: a grenade (landing point, then optionally the throw point), a stroke, a shape or a text. */
+export interface BoardMark {
+  id: string;
+  type: MarkType;
+  step: number;
+  l: number;
+  pts: [number, number][];
+  kind?: NadeKind;
+  color?: string;
+  width?: number;
+  text?: string;
+}
+export interface BoardSource { match: string; round: number; sec: number }
+export interface Board {
+  format: 1;
+  id?: string;
+  name: string;
+  map: string;
+  author: string;
+  steps: string[];
+  tokens: BoardToken[];
+  marks: BoardMark[];
+  source?: BoardSource;
+  created?: number;
+  updated?: number;
+}
+export interface BoardSummary {
+  id: string;
+  name: string;
+  map: string;
+  author: string;
+  created: number;
+  updated: number;
+  steps: number;
+  players: number;
+  source: BoardSource | null;
+}
+
 /** A CS2 link error code from the backend ("cs2_no_ack") in words; other text as it is. */
 export const cs2Error = (code: string) => (code.startsWith("cs2_") ? td(`cs2.msg.${code.slice(4)}`, code) : code);
 
@@ -554,6 +605,11 @@ export const api = {
   recordings: (id: string) => request<Recording[]>(`${m(id)}/recordings`),
   deleteRecording: (id: string, name: string) => request<{ deleted: string }>(`${m(id)}/recordings/${encodeURIComponent(name)}`, { method: "DELETE" }),
   replay: (id: string, round: number) => request<Replay>(`${m(id)}/rounds/${round}/replay`),
+  boards: (map?: string) => request<BoardSummary[]>(`/api/boards${map ? `?map=${encodeURIComponent(map)}` : ""}`),
+  board: (id: string) => request<Board>(`/api/boards/${encodeURIComponent(id)}`),
+  createBoard: (b: Board) => request<Board>("/api/boards", json(b)),
+  updateBoard: (id: string, b: Board) => request<Board>(`/api/boards/${encodeURIComponent(id)}`, { ...json(b), method: "PUT" }),
+  deleteBoard: (id: string) => request<{ deleted: string }>(`/api/boards/${encodeURIComponent(id)}`, { method: "DELETE" }),
   maps: () => request<string[]>("/api/maps"),
   mapMeta: (map: string) => request<MapMeta>(`/api/maps/${map}`),
   aggregate: (ids: string[], aliases: Record<string, string>) =>

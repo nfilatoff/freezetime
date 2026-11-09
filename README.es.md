@@ -20,6 +20,7 @@ Funciones:
 - **Grabación con HLAE** — el modo «HLAE (con sonido)» del mismo bloque: la aplicación cierra CS2 si está abierto (tras confirmación), lanza el juego con [HLAE](https://github.com/advancedfx/advancedfx) y `-insecure`, graba clips con sonido exactamente por ticks (`mirv_cmd addAtTick`, `mirv_streams`) y cierra el juego (`quit`). No se pulsan teclas, el juego puede estar en segundo plano, no hacen falta bind ni editar `gameinfo.gi`. HLAE se instala con un botón de la aplicación desde las versiones oficiales, con verificación SHA-256, en `%LOCALAPPDATA%\freezetime-tools\hlae`. Desde un juego lanzado con HLAE no se puede entrar en servidores VAC.
 - **Recorte de pausas** — al grabar se eliminan las pausas entre kills más largas que un umbral (3 s por defecto): en el modo «todas las kills» esas kills pasan a ser clips separados, y un highlight sigue siendo un solo vídeo con saltos a la siguiente kill, junto con el sonido.
 - **Idiomas de la interfaz** — inglés, ruso y español. Por defecto inglés; si el idioma del navegador o de Windows es ruso o español, se activa ese. La elección en el panel lateral se recuerda en el navegador.
+- **Pizarra táctica** — dibuja una táctica en cualquier mapa del pool en hasta 4 pasos (default, utilidad, entrada, post-plant): jugadores CT/T y C4 arrastrados desde la barra, 6 granadas con su radio real y punto de lanzamiento, lápiz, flechas, formas y notas de texto. Al arrastrar a un jugador en un paso posterior se graba la ruta que recorre, y la reproducción mueve a los jugadores por sus rutas. Deshacer/rehacer, atajos reasignables, tácticas guardadas con filtro por mapa, exportación a PNG (un paso o todos en cuadrícula), GIF y MP4. El botón «A la pizarra» de la repetición copia el momento actual (jugadores con nombres, humos, fuegos, la bomba), y desde la pizarra se vuelve a ese momento.
 
 | Resumen de partida | Tácticas | Mapas |
 |---|---|---|
@@ -150,6 +151,7 @@ Tests: `pytest`. El fixture son las rondas 1–8 de una partida de Dust2, genera
 | `out/<name>/` | Resultado de `freezetime batch`. |
 | `out/maps/` | Dibujos de `freezetime viz zones`. |
 | `out/library.json` | Configuración de la aplicación: carpetas de demos, carpeta de CS2 y puerto de la consola de red, nombres de equipos (`team_aliases`), equipo propio (`own_team`). |
+| `out/boards/<id>.json` | Pizarras tácticas guardadas. |
 | `<CS2>/game/csgo/cfg/freezetime_*.cfg` | Lineups y listas de práctica escritos con los botones «Abrir en CS2» e «Instalar en CS2». |
 | `out/_uploads/` | Demos subidas desde la aplicación (y extraídas de archivos comprimidos). |
 | `~/.awpy/<versión>/` | Caché de awpy: radares (`radars/*.png`) y `map_data.json` (transformación de coordenadas, niveles). |
@@ -209,6 +211,7 @@ Los mapas fuera del pool (Overpass, Train, Vertigo, …) no tienen configuració
 | `aggregate.py` | Agregación por partidas, alias de equipos. |
 | `scout.py` | Dosier del rival: tablas por ronda de la partida (`match_data`), selección de rondas del equipo (`select_rounds`), informe y conclusiones (`dossier`), rondas similares, equipos con plantilla compartida. |
 | `replay.py` | Documento de repetición de la ronda (JSON, caché gzip). |
+| `board.py` | Pizarras tácticas: comprobar, guardar y listar `out/boards/<id>.json`. |
 | `viz.py` | Imágenes sobre el radar (matplotlib mediante `awpy.plot`), paneles por nivel. |
 | `report.py` | Informes en Markdown. |
 | `cli.py` | Comandos `freezetime`. |
@@ -218,6 +221,7 @@ Los mapas fuera del pool (Overpass, Train, Vertigo, …) no tienen configuració
 | `app/cs2.py` | Conexión con CS2: búsqueda de la carpeta del juego, escritura de `.cfg`, consola de red (`-netconport`), arranque mediante Steam. |
 | `frontend/` | React + TypeScript + Vite. La repetición y los clips se dibujan en Canvas 2D. |
 | `frontend/src/replayDraw.ts` | Común a repetición y clips: caché de rondas, interpolación, estado del jugador con inventario, icono del jugador, trazadores, cruces de muerte, granadas. |
+| `frontend/src/board.ts`, `pages/Board.tsx` | Pizarra táctica: modelo (pasos, fichas con rutas, marcas), dibujo, reproducción, fotograma de repetición → pizarra; la página del editor. |
 | `frontend/src/components/ClipView.tsx`, `clipExport.ts` | Constructor de clips, maquetación del fotograma, codificación a GIF (gifenc) y MP4 (WebCodecs + mp4-muxer), zip (fflate). |
 | `frontend/src/clipSummary.ts`, `zones.ts` | Datos del clip: zona de un punto (según la configuración del mapa), subtítulo y archivo de texto. |
 | `frontend/src/heat.ts`, `components/MapsView.tsx` | Heatmap: acumulación en una cuadrícula de 256×256, desenfoque, paletas, modos y filtros. |
@@ -305,6 +309,21 @@ Filtros: equipo, lado, jugador, arma (para kills, disparos y daño; por ejemplo,
 ### Aplicación: nombres de posiciones
 
 El selector «posiciones» superpone en el radar los nombres de las zonas de la configuración del mapa: en la repetición, el Heatmap, los lineups y las posiciones iniciales de los jugadores. Tres modos: desactivado, nombres, nombres y límites de zonas. El modo es común y se recuerda en el navegador. En el constructor de clips es una capa aparte, porque acaba en el vídeo final; su aspecto sigue el modo común y, con el común desactivado, la capa dibuja nombres y límites. Los vídeos de highlights no llevan nombres. La página «Posiciones» muestra todos los mapas del pool sin demos y tiene su propio selector; al pasar el cursor por un nombre de la lista, la zona se resalta en cualquier modo. Los nombres son los mismos que el juego muestra junto al jugador en el radar (`m_szLastPlaceName`).
+
+### Aplicación: pizarra táctica
+
+La página «Pizarra» (`#/board`, `freezetime/board.py`, `frontend/src/board.ts`, `pages/Board.tsx`) es una pizarra sobre el radar del mapa para dibujar una táctica y enseñarla al equipo.
+
+- **Pasos** — hasta 4: default, utilidad, entrada, post-plant (doble clic para renombrar). Granadas, dibujos y textos pertenecen a un paso; la casilla «paso anterior» muestra el paso previo atenuado.
+- **Jugadores y la bomba** — arrastra CT, T o C4 desde la barra al mapa (un clic lo suelta en el centro). Un jugador conserva su posición en los pasos siguientes hasta que lo muevas. Al arrastrar a un jugador en los pasos 2–4 se graba el camino que recorre: esa es su ruta, dibujada como línea punteada con flecha. «Borrar ruta» la vuelve recta, «Quedarse quieto» deja al jugador donde estaba. Doble clic renombra a un jugador.
+- **Granadas** — humo, molotov, incendiaria, flash, HE y señuelo se dibujan con el radio que usa la repetición (humo 144 unidades, fuego 110). Una granada seleccionada tiene un punto naranja: arrástralo hasta donde se lanza y el lanzamiento se dibuja como un arco.
+- **Dibujo** — lápiz (5 colores, 3 grosores), flecha (Shift ajusta a 45°), rectángulo y elipse (Shift da un cuadrado o un círculo), nota de texto, borrador. El clic derecho borra lo que hay bajo el cursor.
+- **Mapas con niveles** — en Nuke se ven ambos niveles lado a lado (o uno de ellos); un jugador se puede arrastrar de un nivel a otro.
+- **Reproducción** — «Reproducir» (Espacio) se detiene en cada paso y lleva a los jugadores por sus rutas al siguiente; la utilidad del paso aparece poco a poco.
+- **Atajos** — V seleccionar, P lápiz, A flecha, R rectángulo, C elipse, T texto, E borrador, Espacio reproducir, O paso anterior, Q/W paso atrás/adelante, 1–4 pasos, Ctrl+Z / Ctrl+Shift+Z deshacer/rehacer, Supr borrar. Las teclas de herramientas se reasignan en «Atajos» y se recuerdan en el navegador.
+- **Guardar** — «Guardar» escribe `out/boards/<id>.json` (con la versión del formato), «Actualizar» sobrescribe la táctica cargada, «Guardar como nueva» hace una copia. La lista de la derecha muestra las tácticas del mapa (o de todos). Una pizarra sin guardar sobrevive a recargar la página.
+- **Exportación** — PNG del paso actual o de todos los pasos en cuadrícula con título, GIF o MP4 de la reproducción (práctico para Discord).
+- **Desde la repetición** — «⧉ A la pizarra» copia el momento actual al paso 1: jugadores vivos con nombres y bandos, humos, fuegos y la bomba. «Pizarra» abre una pizarra vacía del mismo mapa. Ambos recuerdan el momento, y «◀ Volver a la repetición» regresa a la misma ronda y segundo.
 
 ### Aplicación: rival (dosier)
 
@@ -418,3 +437,10 @@ Un punto se busca entre los polígonos de su nivel (por `z`). Si las zonas se so
 - **Lineups**: la posición son los pies del lanzador en el momento del lanzamiento (en un salto, el suelo antes de saltar), así que en lanzamientos corriendo o saltando el punto de inicio indica dónde salió la granada y la carrerilla hay que repetirla uno mismo. La fuerza del lanzamiento (botón izquierdo/derecho) y el agachado no se detectan.
 - **La consola de red de CS2** se probó con un emulador: comandos, orden, espera de la línea `CS2_GAME_UI_STATE_INGAME` tras cargar el mapa. Si el juego no escribe esa línea, los comandos se envían tras 90 s de espera.
 - **Los entrenadores** se detectan por una fila a cero en `stats`; un entrenador que de verdad jugó rondas cuenta como jugador.
+
+## Licencia
+
+Freezetime tiene el código disponible para leer, pero no es open source. Puedes leer el código y ejecutar la app sin
+modificar con fines no comerciales (para ti o tu equipo). El uso comercial, la modificación, la copia, la redistribución
+y las obras derivadas no están permitidos sin el permiso escrito del autor. Los términos completos están en
+[LICENSE](LICENSE) (la versión en inglés es la vinculante).
