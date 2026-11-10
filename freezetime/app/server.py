@@ -26,6 +26,7 @@ from fastapi.staticfiles import StaticFiles
 
 from freezetime.aggregate import aggregate
 from freezetime.board import BoardError, create_board, delete_board, list_boards, load_board, update_board
+from freezetime.team import ROLES, TeamError, candidates, load_team, rename_team, save_team
 from freezetime.app.archives import is_archive, unpack
 from freezetime.app.cs2 import BIND_COMMAND, SETTLE, CS2Bridge, NoConsole, game_running, steam_account
 from freezetime.app import hlae
@@ -1047,7 +1048,30 @@ def create_app(out: str | Path = "out") -> FastAPI:
     @api.post("/api/teams/own")
     def team_own(name: str | None = Body(None, embed=True)) -> dict:
         lib.set_setting("own_team", name or None)
+        rename_team(lib.out, name)  # the profile is about the same team
         return {"own": name or None}
+
+    def team_payload(profile: dict) -> dict:
+        own = lib.setting("own_team")
+        return {
+            "team": profile | {"name": own or profile["name"]},
+            "roles": list(ROLES),
+            "candidates": candidates(match_index(), own, lib.aliases(), profile["members"]) if own else [],
+        }
+
+    @api.get("/api/team")
+    def team_get() -> dict:
+        """Our team's profile, the roles a member can have, and players of our demos not on the roster yet."""
+        return team_payload(load_team(lib.out))
+
+    @api.put("/api/team")
+    def team_put(team: dict = Body(...)) -> dict:
+        try:
+            saved = save_team(lib.out, team)
+        except TeamError as e:
+            raise HTTPException(400, str(e)) from e
+        lib.set_setting("own_team", saved["name"] or None)  # "our team" everywhere else follows the profile
+        return team_payload(saved)
 
     @api.get("/api/scout/report")
     def scout_report(team: str, map: str, last: int = 10, side: str = "", buy: str = "", rounds_last: int = 0) -> dict:

@@ -449,6 +449,19 @@ code.console { font-size: 11px; background: var(--bg); border: 1px solid var(--l
   position: absolute; z-index: 3; width: 180px; font: 600 13px/1.35 system-ui, sans-serif;
   background: rgba(12, 12, 12, 0.94); border-color: var(--accent); resize: none; padding: 6px 8px;
 }
+.board-roster { position: absolute; z-index: 4; display: flex; flex-wrap: wrap; gap: 4px; max-width: 260px; }
+.board-roster button { padding: 2px 8px; font-size: 12px; background: rgba(16, 16, 16, 0.94); }
+.team-page { max-width: 860px; }
+.team-page h3 { margin: 22px 0 8px; }
+.team-name { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.team-name input { width: 280px; font-weight: 600; }
+table.team-roster { border-collapse: collapse; width: 100%; }
+table.team-roster th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 0 6px 6px 0; }
+table.team-roster td { padding: 3px 6px 3px 0; }
+table.team-roster td:last-child { width: 1%; padding-right: 0; }
+table.team-roster input, table.team-roster select { width: 100%; }
+table.team-roster .mono { font-family: ui-monospace, Consolas, monospace; }
+.team-candidates { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .board-toolbar, .board-selection, .board-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .board-toolbar { padding: 8px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
 .board-toolbar .seg button { padding: 5px 8px; display: inline-flex; align-items: center; }

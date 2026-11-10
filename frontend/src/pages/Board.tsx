@@ -107,6 +107,7 @@ export function BoardPage({ id }: { id?: string }) {
   const [showKeys, setShowKeys] = useState(false);
   const [binding, setBinding] = useState<Action | null>(null);
   const [author, setAuthor] = useState(() => read(AUTHOR_STORAGE) ?? "");
+  const [roster, setRoster] = useState<string[]>([]);
   const callouts = useCalloutMode();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -122,6 +123,7 @@ export function BoardPage({ id }: { id?: string }) {
   // ---- loading ----
   useEffect(() => {
     api.maps().then(setMaps).catch((e: Error) => setMsg({ text: e.message, error: true }));
+    api.team().then((d) => setRoster(d.team.members.map((m) => m.nick))).catch(() => {});
   }, []);
 
   const open = useCallback((b: Board, saved: boolean) => {
@@ -380,12 +382,12 @@ export function BoardPage({ id }: { id?: string }) {
     }
   };
 
-  const finishEdit = (save: boolean) => {
+  const finishEdit = (save: boolean, picked?: string) => {
     const ed = edit;
     setEdit(null);
     const b = boardRef.current;
     if (!ed || !b || !save) return;
-    const value = ed.value.trim();
+    const value = (picked ?? ed.value).trim();
     if (ed.target.kind === "token") {
       commit(updateToken(b, ed.target.id, (tok) => ({ ...tok, label: value.slice(0, 24) })));
     } else if (ed.target.id) {
@@ -737,6 +739,14 @@ export function BoardPage({ id }: { id?: string }) {
                     }}
                     onBlur={() => finishEdit(true)}
                   />
+                )}
+                {edit && editStyle && edit.target.kind === "token" && roster.length > 0 && (
+                  <div className="board-roster" style={{ left: editStyle.left, top: editStyle.top + 34 }} title={t("board.rosterTitle")}>
+                    {roster.map((nick) => (
+                      // on press, before the field loses focus and saves what was typed
+                      <button key={nick} onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); finishEdit(true, nick); }}>{nick}</button>
+                    ))}
+                  </div>
                 )}
               </div>
             )}

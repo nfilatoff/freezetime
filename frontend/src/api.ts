@@ -116,6 +116,16 @@ export interface Teams {
   own: string | null;
 }
 
+// ---- our team's profile (freezetime/team.py) ----
+export interface TeamMember { id: string; nick: string; steamid: string; role: string }
+export interface TeamProfile { format: number; name: string; members: TeamMember[]; updated: number }
+export interface TeamCandidate { steamid: string; nick: string; matches: number }
+export interface TeamInfo {
+  team: TeamProfile;
+  roles: string[];
+  candidates: TeamCandidate[]; // players of our demos who are not on the roster
+}
+
 export interface RoundRef {
   match: string;
   round: number;
@@ -573,6 +583,8 @@ export const api = {
   teams: () => request<Teams>("/api/teams"),
   teamAlias: (raw: string, name: string | null) => request<{ aliases: Record<string, string> }>("/api/teams/alias", json({ raw, name })),
   teamOwn: (name: string | null) => request<{ own: string | null }>("/api/teams/own", json({ name })),
+  team: () => request<TeamInfo>("/api/team"),
+  saveTeam: (team: TeamProfile) => request<TeamInfo>("/api/team", { ...json(team), method: "PUT" }),
   scoutReport: (q: ScoutQuery) => request<ScoutReport>(`/api/scout/report?${query(q)}`),
   scoutPoints: (q: ScoutQuery) => request<Points>(`/api/scout/points?${query(q)}`),
   scoutMovement: (q: ScoutQuery, f: Pick<MovementFilter, "player" | "t_from" | "t_to" | "opp_buy" | "pistol" | "man">) =>
