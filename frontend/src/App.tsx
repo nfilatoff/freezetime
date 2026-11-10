@@ -13,6 +13,7 @@ import { BoardPage } from "./pages/Board";
 import { TeamPage } from "./pages/Team";
 import { NotesPage } from "./pages/Notes";
 import { PlaylistPlayer, PlaylistsPage } from "./pages/Playlists";
+import { PlaybookPage } from "./pages/Playbook";
 import { ClipView } from "./components/ClipView";
 import { LineupsView } from "./components/LineupsView";
 import { IconBoard, IconLibrary, IconLogo, IconMap, IconScout, IconNote, IconPlaylist, IconStar, IconTeam, IconUs } from "./components/Icons";
@@ -73,6 +74,7 @@ export function App() {
     ...(us ? [[us, "nav.us", IconUs] as [string, Key, typeof IconLibrary]] : []),
     ["team", "nav.team", IconTeam],
     ["board", "nav.board", IconBoard],
+    ["playbook", "nav.playbook", IconScout],
     ["notes", "nav.notes", IconNote],
     ["playlists", "nav.playlists", IconPlaylist],
     ["highlights", "nav.highlights", IconStar],
@@ -119,6 +121,8 @@ export function App() {
             <BoardPage id={rest[0]} />
           ) : page === "notes" ? (
             <NotesPage tab={rest[0]} />
+          ) : page === "playbook" ? (
+            <PlaybookPage id={rest[0]} />
           ) : page === "playlists" ? (
             <PlaylistsPage id={rest[0]} />
           ) : page === "playlist" && rest[0] ? (

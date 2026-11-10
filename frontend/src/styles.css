@@ -558,6 +558,45 @@ table.team-roster .mono { font-family: ui-monospace, Consolas, monospace; }
   .board-side { width: 100%; position: static; max-height: none; }
 }
 
+/* ---------- Private team playbook ---------- */
+.pb-layout { display: flex; gap: 20px; align-items: flex-start; }
+.pb-side { width: 205px; flex: none; display: flex; flex-direction: column; gap: 8px; }
+.pb-side > button { text-align: left; display: flex; justify-content: space-between; overflow-wrap: anywhere; }
+.pb-side .on, .pb-entry.on { border-color: var(--accent); background: var(--accent-dim); }
+.pb-side form { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 18px; }
+.pb-side input:not([type=checkbox]) { width: 100%; }
+.pb-main { flex: 1; min-width: 0; }
+.pb-main > .row > h2 { margin: 0; }
+.pb-filters { margin: 14px 0; }
+.pb-filters input { flex: 1; min-width: 140px; }
+.pb-entries { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr)); gap: 8px; margin: 16px 0 24px; }
+.pb-entry { border: 1px solid var(--line2); border-radius: 6px; display: flex; min-width: 0; }
+.pb-entry a { display: flex; flex-direction: column; gap: 6px; padding: 12px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pb-order { display: flex; flex-direction: column; justify-content: center; padding-right: 6px; }
+.pb-card { background: var(--panel); padding: 20px; border: 1px solid var(--line2); border-radius: 8px; margin: 16px 0; }
+.pb-card > .row > h2 { margin: 0; }
+.pb-prose { white-space: pre-wrap; overflow-wrap: anywhere; }
+.pb-task { border-left: 2px solid var(--accent); padding: 8px 12px; margin: 12px 0; background: var(--bg2); }
+.pb-task h4 { margin: 0 0 8px; }
+.pb-editor fieldset > label { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+.pb-editor textarea { width: 100%; resize: vertical; }
+.pb-editor .row label { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.pb-editor input:not([type=checkbox]), .pb-editor select { max-width: 100%; }
+.pb-editor fieldset > .row:last-child { margin-top: 20px; }
+.pb-utility { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+.pb-utility code { overflow-wrap: anywhere; white-space: pre-wrap; }
+.pb-attachment { border-top: 1px solid var(--line2); padding: 12px 0; }
+.pb-attachment > a { display: inline-block; margin: 10px 0; }
+.pb-attachment video { display: block; max-width: 100%; max-height: 65vh; margin-top: 8px; }
+.pb-attach-form { border: 1px solid var(--line2); padding: 12px; border-radius: 6px; }
+.pb-import { margin-top: 16px; }
+.pb-adopt { margin-top: 10px; }
+.pb-stats { border-top: 1px solid var(--line2); margin-top: 20px; }
+.pb-print article { break-inside: auto; border-top: 1px solid #888; }
+.pb-print .pb-task { background: #fff; border-color: #555; break-inside: avoid; }
+.pb-print code { color: #000; }
+@media (max-width: 900px) { .pb-layout { flex-direction: column; } .pb-side { width: 100%; } .pb-main { width: 100%; } }
+
 @media print {
   :root { color-scheme: light; }
   body { background: #fff; color: #000; font-size: 11px; }

@@ -157,6 +157,7 @@ Tests: `pytest`. The fixture is rounds 1–8 of one Dust2 match, built by `tests
 | `out/team.json` | The team profile: name and roster. |
 | `out/notes.json` | Notes with a timecode: match, round, second, text, author, mentions, who has read them. |
 | `out/playlists.json` | Playlists: name, folder, owner and items (match, round, from–to seconds, caption). |
+| `out/playbook.json` | Team playbook: shared entries, ordered books, roster tasks, copied utility and attachment references. |
 | `<CS2>/game/csgo/cfg/freezetime_*.cfg` | Lineups and practice lists written by the "Open in CS2" and "Install in CS2" buttons. |
 | `out/_uploads/` | Demos uploaded through the app (and extracted from archives). |
 | `~/.awpy/<version>/` | awpy cache: radars (`radars/*.png`) and `map_data.json` (coordinate transform, levels). |
@@ -221,6 +222,7 @@ Maps outside the pool (Overpass, Train, Vertigo, …) have no config. `tactics` 
 | `pack.py` | Packs: export and import of a `.zip` with boards, the team profile and parsed matches. |
 | `notes.py` | Notes with a timecode: storing, `@nick` mentions, read marks, merging from packs. |
 | `playlists.py` | Playlists: storing, items, owner rights, merging from packs. |
+| `playbook.py` | Private playbook: validation, atomic storage, shared entries, books, tasks, copying demo utility and merging packs. |
 | `app/access.py` | Rules of the team server: who is asking (this computer, staff, player) and what they may do. |
 | `viz.py` | Images over the radar (matplotlib via `awpy.plot`), per-level panels. |
 | `report.py` | Markdown reports. |
@@ -357,6 +359,16 @@ The team server has no HTTPS: use it on a network you trust or over Tailscale/Ze
 - **Notes** — "📝 Note" in the 2D replay writes a note at the current second of the round (`freezetime/notes.py`, `out/notes.json`). It is signed with the nick chosen on the Team page ("analyst" on the app's own computer when nobody is chosen). `@nick` names a teammate from the roster: the note appears under "For me" on the "Notes" page (`#/notes`), the menu shows the number of unread mentions. Notes of a round are listed under the replay and marked on its timeline; a click jumps to the moment. The "Notes" page lists the notes of every match, newest first or by match and round. A note is changed or deleted by its author or the staff. The Markdown export of the opponent dossier ends with the notes on its matches.
 - **Playlists** — "☆ Playlist" in the 2D replay adds the round, or a stretch of it (from–to seconds after the freeze end; empty means from the freeze end / to the end of the round), with a caption to a new or an existing playlist (`freezetime/playlists.py`, `out/playlists.json`). The "Playlists" page (`#/playlists`) groups them by folder and shows the recent ones; in a playlist, items are reordered by dragging and edited in place. "▶ Play" (`#/playlist/<id>/<item>`) plays the items one after another in the 2D replay, with a switch to the next item and to another playlist. "Add its highlights" turns the automatic and custom highlights of a match into items (highlights stay where they are). Video: every item is drawn on the radar like a highlight clip, GIF or MP4, in one zip; an item to the end of the round is cut at 90 s. "Record in CS2" (on the app's own computer) sends the items of one match to the recorder.
 - Notes and playlists go into packs together with boards and the team profile.
+
+### App: private team playbook
+
+The "Playbook" page (`#/playbook`, an entry at `#/playbook/<id>`) keeps strategies, short team protocols and setups in `out/playbook.json`. Staff edit; players read. Entries have a map, side, category, description, ordered steps and tasks assigned to stable roster member IDs. "My tasks" uses the nick chosen on the Team page and shows that player's tasks. It is a display filter: teammates can still read the shared playbook.
+
+- Create named playbooks for a map, opponent or tournament. One entry can belong to several: edit its membership in the entry editor. Drag entries to reorder within a book, or use the up arrow. Pinned entries appear first; their category and pin apply in every book. Removing a book keeps its entries; deleting an entry removes it from all books.
+- Attach a tactics board, a round or segment, a playlist, a recorder MP4, or an HTTPS YouTube/Twitch link. Round segments and playlists play inside the card, recordings use the local video player. External links open on their own websites; nothing is downloaded or embedded from the network.
+- To copy utility, attach a round, assign a roster player, then choose the demo player under their task and click "Copy throws". Throws in the attached time range are copied with grenade type, ground position, view angles, `setpos`/`setang` and a source replay link. Repeating the import does not duplicate the same throws. Save the entry to keep changes.
+- "Add to our playbook" in a dossier strategy saves its utility signature and example rounds. The Aggregate page can find strategies in the selected matches on one map, using the supplied aliases, and save them too. Saved detectors estimate uses and win rate across our team's matches on that map using the same site and smoke/molotov-zone threshold as the dossier, excluding post-plant utility. This is a heuristic for T strategies, not proof of the call; manually written entries have no detector unless adopted from analysis.
+- TXT, Markdown, XLSX and "Print / PDF" export the entries matching the current book and filters, including "My tasks". Exports contain text, console commands and attachment links; they do not bundle videos or render board images. Pack export on the Team page includes the playbook when selected and merges newer entries/books by ID. Attachment references travel with it: include the relevant boards, playlists, roster and parsed matches as needed; recordings stay on their original computer.
 
 ### App: opponent (dossier)
 

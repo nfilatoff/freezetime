@@ -33,6 +33,7 @@ from freezetime.team import ROLES, TeamError, candidates, load_team, rename_team
 from freezetime.pack import PackError, export_pack, import_pack
 from freezetime.notes import NoteError, add_note, delete_note, load_notes, mark_read, unread_for, update_note
 from freezetime.playlists import PlaylistError, add_item, create_playlist, delete_playlist, get_playlist, load_playlists, update_playlist
+from freezetime import playbook as playbook_mod
 from freezetime.app import access
 from freezetime.app.archives import is_archive, unpack
 from freezetime.app.cs2 import BIND_COMMAND, SETTLE, CS2Bridge, NoConsole, game_running, steam_account
@@ -45,7 +46,7 @@ from freezetime.highlights import add_custom, delete_custom, highlights, kill_cl
 from freezetime.lineups import MAP_RE, PRACTICE, cfg_name, lineup_cfg, lineup_commands, list_cfg, safe_text, throws
 from freezetime.maps import available_maps, load_map_config
 from freezetime.replay import round_payload
-from freezetime.scout import MatchData, dossier, match_data, roster_suggestions, select_rounds, similar_rounds
+from freezetime.scout import MatchData, dossier, match_data, playbook as discovered_playbook, roster_suggestions, select_rounds, similar_rounds, strategy_stats
 from freezetime.tactics import tactics, userid_map, utility_events
 from freezetime.team_stats import team_stats
 
@@ -1068,14 +1069,14 @@ def create_app(out: str | Path = "out", team: bool = False) -> FastAPI:
     @api.post("/api/pack/export")
     def pack_export(
         boards: list[str] | None = Body(None), team: bool = Body(False), matches: list[str] = Body(default_factory=list),
-        notes: bool = Body(False), playlists: bool = Body(False),
+        notes: bool = Body(False), playlists: bool = Body(False), playbook: bool = Body(False),
     ) -> FileResponse:
         """``boards``: ids, or null for every board."""
         for match_id in matches:
             lib.match_dir(match_id)
         tmp = temp_zip()
         try:
-            export_pack(lib.out, tmp, boards=boards, team=team, notes=notes, playlists=playlists, matches=matches)
+            export_pack(lib.out, tmp, boards=boards, team=team, notes=notes, playlists=playlists, playbook=playbook, matches=matches)
         except PackError as e:
             tmp.unlink(missing_ok=True)
             raise HTTPException(400, str(e)) from e
@@ -1200,6 +1201,80 @@ def create_app(out: str | Path = "out", team: bool = False) -> FastAPI:
         _, my_id, can_edit = me(request)
         playlist_call(delete_playlist, lib.out, playlist_id, my_id, can_edit)
         return {"deleted": playlist_id}
+
+    # ---- private playbook: everyone reads; the guard restricts writes to staff ----
+    @api.exception_handler(playbook_mod.PlaybookError)
+    async def playbook_error(_request: Request, error: playbook_mod.PlaybookError):
+        return JSONResponse({"detail": str(error)}, status_code=400)
+
+    @api.get("/api/playbook")
+    def private_playbook() -> dict:
+        return playbook_mod.load_playbook(lib.out)
+
+    @api.post("/api/playbook/utility")
+    def playbook_utility(
+        match: str = Body(...), round: int = Body(...), steamid: str = Body(...),
+        member: str = Body(...), start: float | None = Body(None), end: float | None = Body(None),
+    ) -> list[dict]:
+        if member not in {m["id"] for m in members()}:
+            raise HTTPException(404, "no roster member")
+        d = lib.match_dir(match)
+        ov = _overview(d, _stamp(d))
+        if round not in {r["round"] for r in ov["timeline"]} or steamid not in {str(p["steamid"]) for p in ov["players"]}:
+            raise HTTPException(404, "no demo round or player")
+        return playbook_mod.copy_utility(d, match, round, steamid, start, end)
+
+    @api.post("/api/playbook/discover")
+    def playbook_discover(
+        matches: list[str] = Body(...), team: str = Body(...), map: str = Body(...), aliases: dict[str, str] = Body(default_factory=dict),
+    ) -> dict:
+        scope = []
+        for match_id in dict.fromkeys(matches):
+            d = lib.match_dir(match_id)
+            md = _match_data(d, _stamp(d), lib.match_date(d))
+            if md.map == map:
+                scope.append(md)
+        try:
+            selection = select_rounds(sorted(scope, key=lambda m: -m.date), team, aliases)
+        except ValueError as e:
+            raise HTTPException(404, str(e)) from e
+        return discovered_playbook(selection)
+
+    @api.get("/api/playbook/entries/{entry_id}/stats")
+    def playbook_stats(entry_id: str) -> dict:
+        entry = next((e for e in playbook_mod.load_playbook(lib.out)["entries"] if e["id"] == entry_id), None)
+        if entry is None:
+            raise HTTPException(404, "no playbook entry")
+        own = lib.setting("own_team") or load_team(lib.out)["name"]
+        empty = {"rounds": 0, "wins": 0, "win_pct": None, "examples": [], "sample": 0, "warnings": []}
+        if not own or not entry["detector"]:
+            return empty | {"available": False}
+        scope = [m for m in match_index() if m["map"] == entry["map"] and own in {lib.aliases().get(t, t) for t in m["teams"]}]
+        if not scope:
+            return empty | {"available": True}
+        selection = select_rounds([_match_data(m["dir"], _stamp(m["dir"]), m["date"]) for m in scope], own, lib.aliases())
+        detector = entry["detector"]
+        return strategy_stats(selection, detector["site"], detector["core"]) | {
+            "available": True, "sample": selection.rounds.filter(pl.col("side") == "terrorist").height,
+            "warnings": [w for m in selection.matches for w in m.warnings],
+        }
+
+    @api.post("/api/playbook/{collection}")
+    def playbook_create(collection: str, item: dict = Body(..., embed=True)) -> dict:
+        return playbook_mod.save_item(lib.out, collection, item)
+
+    @api.put("/api/playbook/{collection}/{item_id}")
+    def playbook_update(collection: str, item_id: str, item: dict = Body(..., embed=True)) -> dict:
+        result = playbook_mod.save_item(lib.out, collection, item, item_id)
+        if result is None:
+            raise HTTPException(404, "no playbook entry or book")
+        return result
+
+    @api.delete("/api/playbook/{collection}/{item_id}")
+    def playbook_delete(collection: str, item_id: str) -> dict:
+        if not playbook_mod.delete_item(lib.out, collection, item_id):
+            raise HTTPException(404, "no playbook entry or book")
+        return {"deleted": item_id}
 
     @api.get("/api/maps")
     def map_list() -> list[str]:

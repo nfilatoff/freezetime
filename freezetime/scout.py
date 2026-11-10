@@ -368,8 +368,8 @@ def _signature(u: pl.DataFrame) -> set[str]:
     return {f"{t}:{z}" for t, z in u.select("type", "zone").unique().iter_rows()}
 
 
-def playbook(s: Selection) -> dict:
-    """T rounds grouped into recurring strats: the same site with mostly the same smokes and molotovs."""
+def _strategy_entries(s: Selection) -> list:
+    """Round signatures shared by clustering and the team's saved strategy detector."""
     t = s.rounds.filter((pl.col("side") == T) & pl.col("target_site").is_not_null()).sort("match_no", "round_num")
     util = s.utility.filter((pl.col("side") == T) & pl.col("zone").is_not_null())
     parts = {k: g for k, g in util.group_by("match", "round_num")}
@@ -385,6 +385,29 @@ def playbook(s: Selection) -> dict:
             sig = _signature(u.filter(pl.col("type").is_in(SIGNATURE_TYPES)))
             nades = u
         entries.append((r, sig, nades))
+    return entries
+
+
+def _signature_score(a: set[str], b: set[str]) -> float:
+    return len(a & b) / len(a | b) if a | b else 1.0
+
+
+def strategy_stats(s: Selection, site: str, core: list[dict]) -> dict:
+    """Recognise a saved T strategy with the same site/signature threshold as the dossier.
+
+    This is a utility-pattern heuristic, not proof that the team called a particular tactic.
+    Count individual rounds too, even when there are too few to form a dossier cluster.
+    """
+    signature = {f"{c['type']}:{c['zone']}" for c in core}
+    found = [r for r, sig, _ in _strategy_entries(s) if r["target_site"] == site and _signature_score(sig, signature) >= JACCARD]
+    wins = sum(bool(r["won"]) for r in found)
+    return {"rounds": len(found), "wins": wins, "win_pct": round(wins / len(found) * 100) if found else None,
+            "examples": [_example(r, r["exec_sec"]) for r in found[:MAX_EXAMPLES]]}
+
+
+def playbook(s: Selection) -> dict:
+    """T rounds grouped into recurring strats: the same site with mostly the same smokes and molotovs."""
+    entries = _strategy_entries(s)
 
     # Largest signatures first, so a strat grows around its fullest version.
     clusters: list[dict] = []
@@ -394,7 +417,7 @@ def playbook(s: Selection) -> dict:
             if c["site"] != r["target_site"]:
                 continue
             core = c["core"]
-            score = 1.0 if not sig and not core else (len(sig & core) / len(sig | core) if sig | core else 0.0)
+            score = _signature_score(sig, core)
             if score >= JACCARD and score > best_score:
                 best, best_score = c, score
         if best is None:
@@ -426,7 +449,7 @@ def playbook(s: Selection) -> dict:
         exec_secs = [r["exec_sec"] for r in rows if r["exec_sec"] is not None]
         plant_secs = [r["plant_sec"] for r in rows if r["plant_sec"] is not None]
         strats.append({
-            "id": len(strats) + 1, "site": c["site"], "core": core, "rounds": n, "share_pct": round(n / max(t.height, 1) * 100),
+            "id": len(strats) + 1, "site": c["site"], "core": core, "rounds": n, "share_pct": round(n / max(len(entries), 1) * 100),
             "wins": sum(r["won"] for r in rows), "win_pct": round(sum(r["won"] for r in rows) / n * 100),
             "plants": sum(r["plant_site"] is not None for r in rows), "plant_sites": sorted({r["plant_site"] for r in rows if r["plant_site"]}),
             "tempo": tempos, "median_exec_sec": round(float(np.median(exec_secs)), 1) if exec_secs else None,
@@ -434,7 +457,7 @@ def playbook(s: Selection) -> dict:
             "buys": sorted({r["buy"] for r in rows if r["buy"]}, key=lambda b: BUY_ORDER.get(b, 9)),
             "examples": [_example(r, r["exec_sec"]) for r in rows[:MAX_EXAMPLES]], "spots": spots,
         })
-    return {"total": t.height, "one_offs": one_offs, "strats": strats}
+    return {"total": len(entries), "one_offs": one_offs, "strats": strats}
 
 
 def multiround(s: Selection) -> list[dict]:

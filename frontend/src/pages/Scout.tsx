@@ -10,6 +10,7 @@ import { LineupsView } from "../components/LineupsView";
 import { HeatmapPanel, type HeatSource } from "../components/MapsView";
 import { mapPretty } from "../components/MatchPicker";
 import { SampleBadge } from "../components/SampleBadge";
+import { AddToPlaybook } from "../components/PlaybookImport";
 import { drawRadar, levelOf, sideColor, sideShort, useMapAssets, worldToPx, type MapAssets } from "../radar";
 import { t, type Key } from "../i18n";
 import { dossierMarkdown, download } from "../scoutExport";
@@ -422,7 +423,7 @@ function drawSpots(canvas: HTMLCanvasElement, assets: MapAssets, size: number, s
   });
 }
 
-function StratCard({ st, assets }: { st: Strat; assets: MapAssets | null }) {
+function StratCard({ st, assets, map, team }: { st: Strat; assets: MapAssets | null; map: string; team: string }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const levels = assets?.meta.levels.length ?? 1;
   const size = levels > 1 ? 110 : 180;
@@ -450,6 +451,7 @@ function StratCard({ st, assets }: { st: Strat; assets: MapAssets | null }) {
         </div>
         <div className="muted small">{t("scout.stratEnds", { plants: st.plants, n: st.rounds, sites: st.plant_sites.join(", ") || "–", buys: st.buys.map(buyLabel).join(", ") })}</div>
         <div className="insight-foot"><RoundLinks rounds={st.examples} /></div>
+        <AddToPlaybook strategy={st} map={map} team={team} />
       </div>
     </div>
   );
@@ -464,7 +466,7 @@ function Playbook({ report, map, team }: { report: ScoutReport; map: string; tea
       {strats[0] ? (
         <div className="conclusion">{t("scout.playbookTop", { n: strats.length, covered, total, site: strats[0].site, core: stratCore(strats[0].core.slice(0, 3)) || t("scout.noSmokes") })}</div>
       ) : <div className="muted">{t("scout.noStrats")}</div>}
-      <div className="strats">{strats.map((s) => <StratCard key={s.id} st={s} assets={assets} />)}</div>
+      <div className="strats">{strats.map((s) => <StratCard key={s.id} st={s} assets={assets} map={map} team={team} />)}</div>
       {one_offs > 0 && <div className="muted small">{t("scout.oneOffs", { n: one_offs })}</div>}
       <RoundsBrowser report={report} map={map} team={team} />
     </div>

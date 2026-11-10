@@ -58,11 +58,11 @@ export function TeamServer() {
   );
 }
 
-export function Packs({ extra }: { extra?: { key: "notes" | "playlists"; label: Key }[] }) {
+export function Packs({ extra }: { extra?: { key: "notes" | "playlists" | "playbook"; label: Key }[] }) {
   const session = useSession();
   const [matches, setMatches] = useState<LibraryMatch[]>([]);
   const [boards, setBoards] = useState(0);
-  const [what, setWhat] = useState<Record<string, boolean>>({ boards: true, team: true, notes: true, playlists: true });
+  const [what, setWhat] = useState<Record<string, boolean>>({ boards: true, team: true, notes: true, playlists: true, playbook: true });
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null);
@@ -90,7 +90,7 @@ export function Packs({ extra }: { extra?: { key: "notes" | "playlists"; label: 
     api.packImport(f).then((r: PackResult) => {
       reload();
       window.dispatchEvent(new Event("freezetime:session"));
-      const sum = (k: "added" | "updated" | "skipped") => r.boards[k] + (r.notes?.[k] ?? 0) + (r.playlists?.[k] ?? 0);
+      const sum = (k: "added" | "updated" | "skipped") => r.boards[k] + (r.notes?.[k] ?? 0) + (r.playlists?.[k] ?? 0) + (r.playbook?.[k] ?? 0);
       return t("pack.result", {
         added: sum("added"), updated: sum("updated"), skipped: sum("skipped"),
         matches: r.matches.added.length, matchesSkipped: r.matches.skipped.length, team: t(`pack.team.${r.team ?? "none"}` as Key),

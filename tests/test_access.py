@@ -78,11 +78,12 @@ def test_the_game_and_the_disk_answer_this_computer_only(method, path):
 def test_players_look_and_staff_changes():
     player, staff = who(member="bbbbbbbb"), who(member="cccccccc")
     for method, path in [("GET", "/api/library"), ("GET", "/api/matches/m/rounds/3/replay"), ("POST", "/api/aggregate"),
-                         ("POST", "/api/pack/export"), ("POST", "/api/notes"), ("DELETE", "/api/notes/abc"), ("PUT", "/api/playlists/abc")]:
+                         ("POST", "/api/pack/export"), ("POST", "/api/playbook/discover"), ("POST", "/api/notes"), ("DELETE", "/api/notes/abc"), ("PUT", "/api/playlists/abc")]:
         assert A.verdict(player, method, path, True) is None, (method, path)
     for method, path in [("PUT", "/api/upload"), ("DELETE", "/api/matches/m"), ("POST", "/api/boards"), ("PUT", "/api/team"),
                          ("PUT", "/api/pack/import"), ("POST", "/api/teams/alias"), ("POST", "/api/matches/m/highlights"),
-                         ("POST", "/api/notesXYZ")]:  # a prefix is a path segment, not a string match
+                         ("POST", "/api/playbook/entries"), ("PUT", "/api/playbook/books/abc"), ("DELETE", "/api/playbook/entries/abc"),
+                         ("POST", "/api/playbook/utility"), ("POST", "/api/notesXYZ")]:  # a prefix is a path segment, not a string match
         assert A.verdict(player, method, path, True) == (403, "access_staff"), (method, path)
         assert A.verdict(staff, method, path, True) is None, (method, path)
 

@@ -8,6 +8,7 @@ import pytest
 from freezetime import board as B
 from freezetime import notes as N
 from freezetime import playlists as L
+from freezetime import playbook as PB
 from freezetime import pack as P
 from freezetime import team as T
 from tests.test_board import sample as board_sample
@@ -34,7 +35,7 @@ def test_boards_and_team_travel(tmp_path):
     first, second = B.create_board(a, board_sample()), B.create_board(a, board_sample(name="A exec"))
     T.save_team(a, team_sample())
     buf = packed(a, team=True)
-    assert P.read_manifest(buf) | {"created": 0} == {"format": 1, "created": 0, "boards": 2, "team": True, "notes": 0, "playlists": 0, "matches": []}
+    assert P.read_manifest(buf) | {"created": 0} == {"format": 1, "created": 0, "boards": 2, "team": True, "notes": 0, "playlists": 0, "playbook": 0, "matches": []}
 
     result = P.import_pack(b, buf)
     assert result["boards"] == {"added": 2, "updated": 0, "skipped": 0}
@@ -144,3 +145,16 @@ def test_bad_notes_in_a_pack(tmp_path):
     with pytest.raises(P.PackError, match="notes.json"):
         P.import_pack(tmp_path, zip_of({P.MANIFEST: MANIFEST, "notes.json": json.dumps([{"id": "0" * 12, "match": "../x", "round": 1, "text": "x"}])}))
     assert not (tmp_path / "notes.json").exists()
+
+
+def test_playbook_travels_with_shared_entries(tmp_path):
+    a, b = library(tmp_path, "a"), library(tmp_path, "b")
+    entry = PB.save_item(a, "entries", {"name": "Default", "kind": "setup"})
+    PB.save_item(a, "books", {"name": "Tournament", "entries": [entry["id"]]})
+    buf = packed(a, boards=[], playbook=True)
+    assert P.read_manifest(buf)["playbook"] == 2
+    assert P.import_pack(b, buf)["playbook"] == {"added": 2, "updated": 0, "skipped": 0}
+    assert PB.load_playbook(a) == PB.load_playbook(b)
+    assert P.import_pack(b, packed(a, boards=[], playbook=True))["playbook"]["skipped"] == 2
+    with pytest.raises(P.PackError, match="playbook.json"):
+        P.import_pack(b, zip_of({P.MANIFEST: MANIFEST, "playbook.json": json.dumps({"format": 99})}))

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type LibraryMatch, type Tables } from "../api";
 import { DataTable } from "../components/DataTable";
+import { FoundStrategies } from "../components/PlaybookImport";
 import { t, td } from "../i18n";
 
 // in this order; titles are agg.s.<name> in the locales
@@ -96,6 +97,7 @@ export function AggregatePage() {
         </div>
       </div>
       {error && <div className="error">{error}</div>}
+      <FoundStrategies matches={matches.filter((m) => picked.has(m.id))} aliases={aliases} />
       {result && (
         <div>
           {result.warnings.map((w) => <div key={w} className="warn">{w}</div>)}

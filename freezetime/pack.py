@@ -1,6 +1,6 @@
 """Packs: a ``.zip`` to hand team work to somebody without a server.
 
-A pack holds any of: tactics boards, the team profile, notes, playlists and whole parsed matches
+A pack holds any of: tactics boards, the team profile, notes, playlists, playbooks and whole parsed matches
 (the Parquet tables, never the ``.dem``, the replay cache or recordings). Layout::
 
     freezetime-pack.json            {"format": 1, "created": ..., "boards": n, "matches": [...], ...}
@@ -8,6 +8,7 @@ A pack holds any of: tactics boards, the team profile, notes, playlists and whol
     team.json
     notes.json
     playlists.json
+    playbook.json
     matches/<match id>/manifest.json, *.parquet, events/*.parquet, highlights.json
 
 Importing merges and never destroys: a board, note or playlist replaces the local one of the
@@ -29,6 +30,7 @@ from typing import BinaryIO
 from freezetime import board as boards_mod
 from freezetime import notes as notes_mod
 from freezetime import playlists as playlists_mod
+from freezetime import playbook as playbook_mod
 from freezetime.team import TeamError, load_team, save_team, team_path
 
 FORMAT = 1
@@ -53,12 +55,12 @@ def _match_dir(out: Path, match_id: str) -> Path | None:
 
 def export_pack(
     out: str | Path, target: str | Path | BinaryIO, *, boards: list[str] | None = None, team: bool = False,
-    notes: bool = False, playlists: bool = False, matches: list[str] | tuple[str, ...] = (),
+    notes: bool = False, playlists: bool = False, playbook: bool = False, matches: list[str] | tuple[str, ...] = (),
 ) -> dict:
     """Write a pack; ``boards=None`` takes every board, ``[]`` none. Returns its manifest."""
     out = Path(out)
     board_ids = [b["id"] for b in boards_mod.list_boards(out)] if boards is None else list(boards)
-    info: dict = {"format": FORMAT, "created": int(time.time()), "boards": 0, "team": False, "notes": 0, "playlists": 0, "matches": []}
+    info: dict = {"format": FORMAT, "created": int(time.time()), "boards": 0, "team": False, "notes": 0, "playlists": 0, "playbook": 0, "matches": []}
     with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as z:
         for board_id in board_ids:
             b = boards_mod.load_board(out, board_id)
@@ -77,6 +79,13 @@ def export_pack(
             found = playlists_mod.load_playlists(out)
             z.writestr("playlists.json", json.dumps(found, ensure_ascii=False))
             info["playlists"] = len(found)
+        if playbook:
+            try:
+                found = playbook_mod.load_playbook(out)
+            except playbook_mod.PlaybookError as e:
+                raise PackError(str(e)) from e
+            z.writestr("playbook.json", json.dumps(found, ensure_ascii=False, separators=(",", ":")))
+            info["playbook"] = len(found["entries"]) + len(found["books"])
         for match_id in matches:
             d = _match_dir(out, match_id)
             if d is None:
@@ -138,6 +147,7 @@ def import_pack(out: str | Path, source: str | Path | BinaryIO) -> dict:
         result: dict = {
             "boards": {"added": 0, "updated": 0, "skipped": 0}, "team": None,
             "notes": {"added": 0, "updated": 0, "skipped": 0}, "playlists": {"added": 0, "updated": 0, "skipped": 0},
+            "playbook": {"added": 0, "updated": 0, "skipped": 0},
             "matches": {"added": [], "skipped": []},
         }
         for name in names:
@@ -167,6 +177,11 @@ def import_pack(out: str | Path, source: str | Path | BinaryIO) -> dict:
                 result["playlists"] = playlists_mod.merge_playlists(out, _json(z, "playlists.json"))
             except playlists_mod.PlaylistError as e:
                 raise PackError(f"playlists.json: {e}") from e
+        if "playbook.json" in names:
+            try:
+                result["playbook"] = playbook_mod.merge_playbook(out, _json(z, "playbook.json"))
+            except playbook_mod.PlaybookError as e:
+                raise PackError(f"playbook.json: {e}") from e
 
         by_match: dict[str, list[tuple[str, str]]] = {}
         for name in names:

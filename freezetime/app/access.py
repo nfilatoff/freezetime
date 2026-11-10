@@ -33,7 +33,7 @@ LOCAL_ONLY = ("/api/cs2", "/api/recorder", "/api/hlae", "/api/library/folders", 
 # Changes every signed-in member may make: their own notes and playlists, and saying who they are.
 MEMBER_WRITES = ("/api/notes", "/api/playlists", "/api/session")
 # POST requests that only read.
-READ_POSTS = ("/api/aggregate", "/api/pack/export")
+READ_POSTS = ("/api/aggregate", "/api/pack/export", "/api/playbook/discover")
 # Reachable without the token: enough for the page to ask for it.
 OPEN = ("/api/session", "/api/system")
 

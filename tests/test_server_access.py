@@ -185,3 +185,55 @@ def test_notes_and_playlists_on_the_team_server(out):
     assert call(app, "DELETE", f"/api/playlists/{theirs['id']}", cookies=bravo) == (403, {"detail": "access_owner"}, {})
     assert call(app, "PUT", f"/api/playlists/{pl['id']}", cookies=coach, body={"playlist": {"name": "renamed", "items": []}})[1]["owner_nick"] == "bravo"
     assert sorted(p["name"] for p in call(app, "GET", "/api/playlists", cookies=bravo)[1]["list"]) == ["coach's", "renamed"]
+
+
+def test_playbook_is_shared_but_only_staff_edits(out):
+    app = create_app(out, team=True)
+    token = call(app, "GET", "/api/session", LOCAL)[1]["share"]["token"]
+    player = {A.TOKEN_COOKIE: token, A.MEMBER_COOKIE: member(out, "bravo")}
+    staff = player | {A.MEMBER_COOKIE: member(out, "coach")}
+    item = {"name": "B split", "tasks": {member(out, "bravo"): {"text": "Smoke doors"}}}
+    status, entry, _ = call(app, "POST", "/api/playbook/entries", cookies=staff, body={"item": item})
+    assert status == 200
+    path = f"/api/playbook/entries/{entry['id']}"
+    for method, url, body in [("POST", "/api/playbook/entries", {"item": item}), ("PUT", path, {"item": item}),
+                              ("DELETE", path, None), ("POST", "/api/playbook/books", {"item": {"name": "Bad"}}),
+                              ("POST", "/api/playbook/utility", {})]:
+        assert call(app, method, url, cookies=player, body=body) == (403, {"detail": "access_staff"}, {})
+    assert call(app, "GET", "/api/playbook", cookies=player)[1]["entries"] == [entry]
+    assert call(app, "GET", path + "/stats", cookies=player)[1]["available"] is False
+    status, book, _ = call(app, "POST", "/api/playbook/books", cookies=staff, body={"item": {"name": "Dust2", "entries": [entry["id"]]}})
+    assert status == 200 and book["entries"] == [entry["id"]]
+    assert call(app, "PUT", path, cookies=staff, body={"item": item | {"name": "Changed"}})[1]["name"] == "Changed"
+    assert call(app, "POST", "/api/playbook/books", cookies=staff, body={"item": {"name": "Bad", "entries": ["f" * 12]}})[0] == 400
+    assert call(app, "PUT", "/api/playbook/entries/ffffffffffff", cookies=staff, body={"item": item})[0] == 404
+    assert call(app, "POST", "/api/pack/export", cookies=player, body={"boards": [], "playbook": True})[0] == 200
+    assert call(app, "DELETE", path, cookies=staff)[0] == 200
+    assert call(app, "GET", "/api/playbook", cookies=player)[1]["books"][0]["entries"] == []
+
+
+def test_playbook_utility_discovery_and_own_stats(out):
+    from freezetime.lineups import throws
+    from freezetime.scout import match_data
+
+    app = create_app(out)
+    actual = throws(out / "dust2_mini").row(0, named=True)
+    body = {"match": "dust2_mini", "round": actual["round_num"], "steamid": str(actual["steamid"]), "member": member(out, "bravo")}
+    status, copied, _ = call(app, "POST", "/api/playbook/utility", LOCAL, body=body)
+    assert status == 200 and copied["list"] and "setpos" in copied["list"][0]["commands"]
+    assert call(app, "POST", "/api/playbook/utility", LOCAL, body=body | {"member": "nope"})[0] == 404
+    assert call(app, "POST", "/api/playbook/utility", LOCAL, body=body | {"round": 199})[0] == 404
+    assert call(app, "POST", "/api/playbook/utility", LOCAL, body=body | {"steamid": "123"})[0] == 404
+    data = match_data(out / "dust2_mini")
+    raw_team = data.rounds.filter(data.rounds["side"] == "terrorist")["team"][0]
+    call(app, "POST", "/api/teams/alias", LOCAL, body={"raw": raw_team, "name": "Us"})
+    status, found, _ = call(app, "POST", "/api/playbook/discover", LOCAL,
+                            body={"matches": ["dust2_mini"], "map": data.map, "team": "Us", "aliases": {raw_team: "Us"}})
+    assert status == 200 and found["total"] > 0
+    entry = call(app, "POST", "/api/playbook/entries", LOCAL, body={"item": {
+        "name": "B", "map": data.map, "side": "terrorist", "detector": {"site": "B", "core": []},
+    }})[1]
+    status, stats, _ = call(app, "GET", f"/api/playbook/entries/{entry['id']}/stats", LOCAL)
+    assert status == 200 and stats["available"] and stats["sample"] == 8
+    assert 0 <= stats["wins"] <= stats["rounds"] <= stats["sample"]
+    assert call(app, "POST", "/api/playbook/discover", LOCAL, body={"matches": ["nope"], "map": data.map, "team": "Us"})[0] == 404

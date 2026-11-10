@@ -7,7 +7,7 @@ import pytest
 from freezetime.aggregate import aggregate
 from freezetime.app.server import _points, _scouted_points, create_app
 from freezetime.context import load_match
-from freezetime.scout import dossier, match_data, roster_suggestions, select_rounds, similar_rounds
+from freezetime.scout import dossier, match_data, roster_suggestions, select_rounds, similar_rounds, strategy_stats
 
 
 @pytest.fixture(scope="module")
@@ -163,6 +163,23 @@ def test_multiround_lists_starts_and_unvisited_zones(data, team):
         assert p["rounds"] == len(p["spots"]) > 0
         assert sum(z["rounds"] for z in p["zones"]) <= p["rounds"]
         assert set(p["never"]).isdisjoint({z["zone"] for z in p["zones"]})
+
+
+def test_saved_strategy_recognises_one_round_and_ignores_postplant_utility(data, team):
+    from dataclasses import replace
+
+    s = select_rounds([data], team, side="terrorist")
+    rnd = s.rounds["round_num"][0]
+    rounds = s.rounds.head(1).with_columns(target_site=pl.lit("A"), plant_sec=pl.lit(20.), won=pl.lit(True))
+    utility = pl.DataFrame({"match": [data.id] * 3, "round_num": [rnd] * 3, "side": ["terrorist"] * 3,
+                            "type": ["smoke"] * 3, "zone": ["Long", "Cross", "Postplant"], "sec": [5., 8., 30.]})
+    s = replace(s, rounds=rounds, utility=utility)
+    core = [{"type": "smoke", "zone": z} for z in ("Long", "Cross")]
+    stats = strategy_stats(s, "A", core)
+    assert (stats["rounds"], stats["wins"], stats["win_pct"]) == (1, 1, 100)
+    assert stats["examples"][0]["round"] == rnd
+    assert strategy_stats(s, "B", core)["rounds"] == 0
+    assert strategy_stats(s, "A", [{"type": "smoke", "zone": "Other"}])["win_pct"] is None
 
 
 def test_similar_rounds_finds_the_identical_twin_first(data, team):

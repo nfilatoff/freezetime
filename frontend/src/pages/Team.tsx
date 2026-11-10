@@ -130,7 +130,7 @@ export function TeamPage({ onOwn }: { onOwn: (own: string | null) => void }) {
       </fieldset>
       {!canEdit && <div className="muted small">{t("access.staff")}</div>}
       <TeamServer />
-      <Packs extra={[{ key: "notes", label: "pack.notes" }, { key: "playlists", label: "pack.playlists" }]} />
+      <Packs extra={[{ key: "notes", label: "pack.notes" }, { key: "playlists", label: "pack.playlists" }, { key: "playbook", label: "pack.playbook" }]} />
     </div>
   );
 }
