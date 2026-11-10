@@ -21,6 +21,7 @@ Funciones:
 - **Recorte de pausas** — al grabar se eliminan las pausas entre kills más largas que un umbral (3 s por defecto): en el modo «todas las kills» esas kills pasan a ser clips separados, y un highlight sigue siendo un solo vídeo con saltos a la siguiente kill, junto con el sonido.
 - **Idiomas de la interfaz** — inglés, ruso y español. Por defecto inglés; si el idioma del navegador o de Windows es ruso o español, se activa ese. La elección en el panel lateral se recuerda en el navegador.
 - **Pizarra táctica** — dibuja una táctica en cualquier mapa del pool en hasta 4 pasos (default, utilidad, entrada, post-plant): jugadores CT/T y C4 arrastrados desde la barra, 6 granadas con su radio real y punto de lanzamiento, lápiz, flechas, formas y notas de texto. Al arrastrar a un jugador en un paso posterior se graba la ruta que recorre, y la reproducción mueve a los jugadores por sus rutas. Deshacer/rehacer, atajos reasignables, tácticas guardadas con filtro por mapa, exportación a PNG (un paso o todos en cuadrícula), GIF y MP4. El botón «A la pizarra» de la repetición copia el momento actual (jugadores con nombres, humos, fuegos, la bomba), y desde la pizarra se vuelve a ese momento.
+- **Equipo** — un perfil del equipo con su plantilla (nick, SteamID, rol), un servidor del equipo (`freezetime app --team`) que los compañeros abren desde sus ordenadores con un enlace de acceso, y paquetes `.zip` con pizarras, la plantilla y partidas analizadas para quienes no están en el servidor. Todo se queda en vuestros ordenadores: sin nube ni cuentas.
 
 | Resumen de partida | Tácticas | Mapas |
 |---|---|---|
@@ -133,7 +134,7 @@ freezetime maps derive a.dem b.dem [--output path.json]        # crear/actualiza
 ```
 
 ```powershell
-freezetime app [--out out] [--host 127.0.0.1] [--port 8000] [--no-open-browser]
+freezetime app [--out out] [--host 127.0.0.1] [--port 8000] [--no-open-browser] [--team]
 ```
 Inicia la aplicación web.
 
@@ -152,6 +153,7 @@ Tests: `pytest`. El fixture son las rondas 1–8 de una partida de Dust2, genera
 | `out/maps/` | Dibujos de `freezetime viz zones`. |
 | `out/library.json` | Configuración de la aplicación: carpetas de demos, carpeta de CS2 y puerto de la consola de red, nombres de equipos (`team_aliases`), equipo propio (`own_team`). |
 | `out/boards/<id>.json` | Pizarras tácticas guardadas. |
+| `out/team.json` | El perfil del equipo: nombre y plantilla. |
 | `<CS2>/game/csgo/cfg/freezetime_*.cfg` | Lineups y listas de práctica escritos con los botones «Abrir en CS2» e «Instalar en CS2». |
 | `out/_uploads/` | Demos subidas desde la aplicación (y extraídas de archivos comprimidos). |
 | `~/.awpy/<versión>/` | Caché de awpy: radares (`radars/*.png`) y `map_data.json` (transformación de coordenadas, niveles). |
@@ -212,6 +214,9 @@ Los mapas fuera del pool (Overpass, Train, Vertigo, …) no tienen configuració
 | `scout.py` | Dosier del rival: tablas por ronda de la partida (`match_data`), selección de rondas del equipo (`select_rounds`), informe y conclusiones (`dossier`), rondas similares, equipos con plantilla compartida. |
 | `replay.py` | Documento de repetición de la ronda (JSON, caché gzip). |
 | `board.py` | Pizarras tácticas: comprobar, guardar y listar `out/boards/<id>.json`. |
+| `team.py` | El perfil del equipo (`out/team.json`): comprobación, almacenamiento, sugerencias de plantilla a partir de nuestras demos. |
+| `pack.py` | Paquetes: exportación e importación de un `.zip` con pizarras, el perfil del equipo y partidas analizadas. |
+| `app/access.py` | Reglas del servidor del equipo: quién pregunta (este ordenador, cuerpo técnico, jugador) y qué puede hacer. |
 | `viz.py` | Imágenes sobre el radar (matplotlib mediante `awpy.plot`), paneles por nivel. |
 | `report.py` | Informes en Markdown. |
 | `cli.py` | Comandos `freezetime`. |
@@ -329,6 +334,18 @@ La página «Pizarra» (`#/board`, `freezetime/board.py`, `frontend/src/board.ts
 - **Guardar** — «Guardar» escribe `out/boards/<id>.json` (con la versión del formato), «Actualizar» sobrescribe la táctica cargada, «Guardar como nueva» hace una copia. La lista de la derecha muestra las tácticas del mapa (o de todos). Una pizarra sin guardar sobrevive a recargar la página.
 - **Exportación** — PNG del paso actual o de todos los pasos en cuadrícula con título, GIF o MP4 de la reproducción (práctico para Discord).
 - **Desde la repetición** — «⧉ A la pizarra» copia el momento actual al paso 1: jugadores vivos con nombres y bandos, humos, fuegos, la bomba y lo que hayas dibujado sobre la repetición. «Pizarra» abre una pizarra vacía del mismo mapa. Ambos recuerdan el momento, y «◀ Volver a la repetición» regresa a la misma ronda y segundo.
+
+### Aplicación: equipo (plantilla, servidor del equipo, paquetes)
+
+La página «Equipo» (`#/team`, `freezetime/team.py`, `freezetime/app/access.py`, `freezetime/pack.py`) es donde la aplicación sabe quiénes somos «nosotros» y cómo llegan los compañeros a los mismos datos.
+
+- **Perfil** — el nombre del equipo y la plantilla: nick, SteamID64 (opcional: un entrenador no sale en las demos) y rol (IGL, entry, AWP, lurker, apoyo, ancla, rifler, entrenador, analista, mánager). Los jugadores vistos en tus demos que no están en la plantilla se ofrecen debajo y se añaden con un clic. El nombre del perfil es lo mismo que «nuestro equipo» (★ en la página «Rival»). Los nicks de la plantilla se ofrecen al nombrar a un jugador en la pizarra táctica.
+- **Servidor del equipo** — `freezetime app --team` escucha en todas las interfaces de red e imprime los enlaces de acceso (también están en la página «Equipo»): `http://<dirección>:8000/#/join/<token>`. Los compañeros en la misma red, Tailscale o ZeroTier abren un enlace y eligen su nick de la plantilla. No hay contraseñas: el token deja fuera a los extraños (va en el `#fragmento`, así que no queda en ningún registro del servidor, y la página lo cambia por una cookie) y el nick dice quién eres. «Enlaces nuevos» crea un token nuevo; los enlaces antiguos dejan de funcionar.
+- **Permisos** — el ordenador donde se ejecuta la aplicación es el analista: puede hacerlo todo. El cuerpo técnico (analista, entrenador, mánager, IGL) desde otros ordenadores puede subir y analizar demos, guardar pizarras y editar el equipo. Los jugadores miran. El juego (`/api/cs2/*`), el grabador (`/api/recorder/*`), HLAE, las carpetas de la biblioteca y los archivos de demos solo responden al ordenador del analista: nadie pulsa teclas en el CS2 de otro. Sin `--team` la aplicación rechaza a cualquier otro ordenador, incluso iniciada con `--host 0.0.0.0`.
+- **Paquetes** — «Descargar un paquete» crea un `.zip` con todas las pizarras, el perfil del equipo y, si se eligen, partidas analizadas (solo tablas Parquet: sin `.dem`, sin caché de repetición ni grabaciones). «Importar un paquete…» lo combina con tus datos: una pizarra sustituye a la local con el mismo id solo si es más nueva; una partida que ya está en la biblioteca se queda como está; el perfil del equipo se toma solo mientras no haya plantilla propia. Los nombres de archivo del paquete se comprueban antes de escribir nada.
+- **Enlaces** — «🔗 Enlace» en la repetición copia un enlace a la ronda y al segundo; en una pizarra guardada, a la táctica. En el ordenador del analista el enlace usa la dirección de red del servidor del equipo para que un compañero pueda abrirlo.
+
+El servidor del equipo no tiene HTTPS: úsalo en una red de confianza o a través de Tailscale/ZeroTier, no en internet abierto. Una petición cuenta como «este ordenador» por su dirección de loopback, así que un proxy inverso en la misma máquina convertiría a todos en el analista.
 
 ### Aplicación: rival (dosier)
 

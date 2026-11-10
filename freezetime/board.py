@@ -204,3 +204,18 @@ def delete_board(out: str | Path, board_id: str) -> bool:
         return False
     p.unlink()
     return True
+
+
+def import_board(out: str | Path, board: dict) -> str:
+    """Store a board that came with its own id (from a pack): ``added``, ``updated`` when it is
+    newer than ours, else ``skipped``. Its id and times are kept, so packs can be merged again."""
+    board_id = str(board.get("id") or "")
+    path = _path(out, board_id)
+    data = _check(board)
+    stamp = lambda v: int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else 0  # noqa: E731
+    updated = stamp(board.get("updated")) or int(time.time())
+    old = load_board(out, board_id)
+    if old is not None and stamp(old.get("updated")) >= updated:
+        return "skipped"
+    _write(path, {"id": board_id, **data, "created": stamp(board.get("created")) or updated, "updated": updated})
+    return "added" if old is None else "updated"

@@ -180,7 +180,7 @@ export function LibraryPage() {
             return (
               <div key={m.id} className="card clickable" onClick={() => go("match", m.id, "overview")}>
                 <button
-                  className="card-del"
+                  className="card-del only-edit"
                   title={m.busy ? t("lib.busy") : t("common.delete")}
                   disabled={m.busy}
                   onClick={(e) => {
@@ -230,7 +230,7 @@ export function LibraryPage() {
         </div>
       </section>
 
-      <section>
+      <section className="only-local">
         <h2>{t("lib.demos")} <span className="count">{demos.length}</span></h2>
         <div className="row">
           <input

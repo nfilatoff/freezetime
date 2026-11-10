@@ -11,6 +11,7 @@ import { reasonLabel, t, type Key } from "../i18n";
 import { CalloutToggle } from "./CalloutToggle";
 import { ToolIcon } from "./Icons";
 import { KillCard } from "./KillCard";
+import { shareUrl } from "../session";
 
 const SPEEDS = [0.25, 0.5, 1, 2, 4, 8];
 const KILLFEED_SEC = 6;
@@ -443,6 +444,12 @@ export function ReplayView({ match, round, at }: { match: MatchOverview; round: 
               }}
             >
               {t("replay.openBoard")}
+            </button>
+            <button
+              title={t("replay.copyLinkTitle")}
+              onClick={() => copy(shareUrl("match", match.id, "replay", round, Math.round(((tickRef.current - data.freeze_end_tick) / data.tick_rate) * 10) / 10))}
+            >
+              {t("common.link")}
             </button>
             <span className="sketch">
               <button className={drawing ? "on" : ""} title={t("replay.drawTitle")} onClick={() => setDrawing((d) => !d)}>{t("replay.draw")}</button>

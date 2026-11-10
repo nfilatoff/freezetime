@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type TeamCandidate, type TeamInfo, type TeamMember } from "../api";
 import { t, type Key } from "../i18n";
+import { Packs, TeamServer, WhoAmI } from "../components/TeamShare";
+import { useSession } from "../session";
 
 const MAX_MEMBERS = 20;
 const roleLabel = (role: string) => t(`team.role.${role}` as Key);
@@ -16,6 +18,8 @@ export function TeamPage({ onOwn }: { onOwn: (own: string | null) => void }) {
   const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const saved = useRef("");
+  const session = useSession();
+  const canEdit = !!session?.can_edit;
 
   const snapshot = (n: string, m: TeamMember[]) => JSON.stringify([n.trim(), m.map((x) => [x.id, x.nick.trim(), x.steamid.trim(), x.role])]);
   const show = (d: TeamInfo) => {
@@ -50,6 +54,7 @@ export function TeamPage({ onOwn }: { onOwn: (own: string | null) => void }) {
     api.saveTeam({ ...info.team, name, members })
       .then((d) => {
         show(d);
+        window.dispatchEvent(new Event("freezetime:session")); // the roster to pick "who am I" from changed
         onOwn(d.team.name || null);
         setMsg({ text: t("team.saved") });
       })
@@ -61,6 +66,8 @@ export function TeamPage({ onOwn }: { onOwn: (own: string | null) => void }) {
     <div className="page team-page">
       <div className="pagehead"><h1>{t("team.title")}</h1><div className="sub">{t("team.sub")}</div></div>
 
+      <WhoAmI />
+      <fieldset className="plain" disabled={!canEdit}>
       <label className="team-name">
         <span>{t("team.name")}</span>
         <input value={name} maxLength={60} list="team-known" placeholder={t("team.namePlaceholder")} onChange={(e) => { setMsg(null); setName(e.target.value); }} />
@@ -120,6 +127,10 @@ export function TeamPage({ onOwn }: { onOwn: (own: string | null) => void }) {
         </>
       )}
       {info.team.name && info.candidates.length === 0 && members.length === 0 && <div className="muted small">{t("team.noDemos")}</div>}
+      </fieldset>
+      {!canEdit && <div className="muted small">{t("access.staff")}</div>}
+      <TeamServer />
+      <Packs />
     </div>
   );
 }

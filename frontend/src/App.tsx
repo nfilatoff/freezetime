@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { hashParts } from "./router";
+import { refreshSession, setSession, useSession } from "./session";
+import { Gate } from "./components/Gate";
 import { LibraryPage } from "./pages/Library";
 import { MatchPage } from "./pages/Match";
 import { AggregatePage } from "./pages/Aggregate";
@@ -28,10 +30,28 @@ export function App() {
   const [page, ...rest] = useHash();
   const lang = useLang();
   useEffect(() => detectSystemLang(() => api.system().then((s) => s.locale)), []);
-  const [own, setOwn] = useState<string | null>(null);
+  const session = useSession();
+  const [joinFailed, setJoinFailed] = useState(false);
   useEffect(() => {
-    api.teams().then((d) => setOwn(d.own)).catch(() => {});
+    // a join link carries the team token in the fragment: trade it for a cookie and drop it from the address
+    const [first, token] = hashParts();
+    if (first !== "join" || !token) {
+      refreshSession().catch(() => {});
+      return;
+    }
+    api.login({ token }).then(setSession).catch(() => {
+      setJoinFailed(true);
+      return refreshSession().catch(() => {});
+    }).finally(() => {
+      window.history.replaceState(null, "", "#/");
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
   }, []);
+  const [own, setOwn] = useState<string | null>(null);
+  const allowed = !!session && !session.need;
+  useEffect(() => {
+    if (allowed) api.teams().then((d) => setOwn(d.own)).catch(() => {});
+  }, [allowed]);
   const us = own ? `scout/${encodeURIComponent(own)}` : null;
   const nav: [string, Key, typeof IconLibrary][] = [
     ["", "nav.library", IconLibrary],
@@ -47,8 +67,10 @@ export function App() {
     : page === "scout" && own && rest[0] === own ? us ?? ""
     : page === "aggregate" || page === "clip" || page === "lineups" ? "scout"
     : page ?? "";
+  if (!session) return null;
+  if (session.need) return <Gate session={session} joinFailed={joinFailed} />;
   return (
-    <div className="shell">
+    <div className={`shell ${session.local ? "" : "no-local"} ${session.can_edit ? "" : "no-edit"}`}>
       <aside className="sidebar">
         <a className="logo" href="#/" title="Freezetime">
           <IconLogo />
@@ -61,6 +83,7 @@ export function App() {
             </a>
           ))}
         </nav>
+        {session.member && <a className="whoami" href="#/team" title={t("team.you")}>{session.member.nick}</a>}
         <LangSwitch lang={lang} />
       </aside>
       <div className="content">

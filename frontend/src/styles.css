@@ -451,6 +451,21 @@ code.console { font-size: 11px; background: var(--bg); border: 1px solid var(--l
 }
 .board-roster { position: absolute; z-index: 4; display: flex; flex-wrap: wrap; gap: 4px; max-width: 260px; }
 .board-roster button { padding: 2px 8px; font-size: 12px; background: rgba(16, 16, 16, 0.94); }
+.no-local .only-local, .no-edit .only-edit { display: none !important; }
+fieldset.plain { border: none; padding: 0; margin: 0; min-width: 0; }
+.whoami { margin-top: auto; padding: 6px 4px; font-size: 11px; font-weight: 600; text-align: center; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.whoami + .lang { margin-top: 0; }
+.gate { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.gate-card { width: min(440px, 100%); padding: 28px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; text-align: center; }
+.gate-logo svg { width: 44px; height: 44px; }
+.gate-card h1 { margin: 12px 0 6px; overflow-wrap: anywhere; }
+.gate-card p { color: var(--muted); }
+.gate-members { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 14px; }
+.gate-members button { display: flex; flex-direction: column; gap: 2px; padding: 10px 8px; }
+.pack-matches { margin: 6px 0; }
+.pack-matches summary { cursor: pointer; font-size: 13px; }
+.pack-matches label { display: block; padding: 2px 0 2px 14px; }
+.team-page input.mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
 .team-page { max-width: 860px; }
 .team-page h3 { margin: 22px 0 8px; }
 .team-name { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }

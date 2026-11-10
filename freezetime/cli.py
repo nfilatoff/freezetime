@@ -182,8 +182,13 @@ def maps_derive(demos: list[Path], output: Path | None = None) -> None:
 
 
 @app.command("app")
-def app_cmd(out: Path = Path("out"), host: str = "127.0.0.1", port: int = 8000, open_browser: bool = True) -> None:
-    """Run the web app (library, match pages, 2D replay) at http://HOST:PORT."""
+def app_cmd(out: Path = Path("out"), host: str | None = None, port: int = 8000, open_browser: bool = True, team: bool = False) -> None:
+    """Run the web app (library, match pages, 2D replay) at http://HOST:PORT.
+
+    --team serves the whole team from this computer: it listens on every network interface
+    (unless --host says otherwise) and lets teammates in with the join link printed at the
+    start and shown on the Team page.
+    """
     import threading
     import webbrowser
 
@@ -193,11 +198,29 @@ def app_cmd(out: Path = Path("out"), host: str = "127.0.0.1", port: int = 8000, 
 
     if not STATIC_DIR.exists():
         typer.echo("frontend is not built yet: cd frontend && npm install && npm run build", err=True)
-    url = f"http://{host}:{port}/"
+    host = host or ("0.0.0.0" if team else "127.0.0.1")
+    url = f"http://{'127.0.0.1' if host in ('0.0.0.0', '::') else host}:{port}/"
     if open_browser:
         threading.Timer(1.0, webbrowser.open, args=(url,)).start()
     typer.echo(f"Freezetime app on {url} (data in {out.resolve()})")
-    uvicorn.run(create_app(out), host=host, port=port, log_level="warning")
+    application = create_app(out, team=team)
+    if team:
+        from freezetime.app.access import lan_addresses
+        from freezetime.app.server import Library
+
+        token = Library(out).setting("team_token")
+        if not token:  # the first request makes one; make it now so the link can be printed
+            from freezetime.app.access import new_token
+
+            token = new_token()
+            Library(out).set_setting("team_token", token)
+        typer.echo("Team server: teammates open one of these links (LAN, Tailscale or ZeroTier address of this computer):")
+        for ip in lan_addresses() or ["<this computer's address>"]:
+            typer.echo(f"  http://{ip}:{port}/#/join/{token}")
+        typer.echo("The game, the recorder and deleting demos stay available on this computer only.")
+    elif host not in ("127.0.0.1", "localhost", "::1"):
+        typer.echo("Other computers are refused without --team.", err=True)
+    uvicorn.run(application, host=host, port=port, log_level="warning")
 
 
 if __name__ == "__main__":

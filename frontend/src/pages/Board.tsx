@@ -17,6 +17,7 @@ import { t, type Key } from "../i18n";
 import { RADAR_SIZE, levelLabel, panelLevels, useMapAssets, CT_COLOR, T_COLOR } from "../radar";
 import { NADE_COLORS } from "../replayDraw";
 import { go } from "../router";
+import { copyText, shareUrl } from "../session";
 
 const TOOLS: [Tool, Key][] = [
   ["select", "board.tool.select"], ["pen", "board.tool.pen"], ["arrow", "board.tool.arrow"], ["rect", "board.tool.rect"],
@@ -654,6 +655,14 @@ export function BoardPage({ id }: { id?: string }) {
           <button onClick={() => go("match", board.source!.match, "replay", board.source!.round, Math.round(board.source!.sec * 10) / 10)}
             title={t("board.backToReplayTitle", { round: board.source.round })}>
             {t("board.backToReplay")}
+          </button>
+        )}
+        {board.id && (
+          <button title={t("board.copyLinkTitle")} onClick={async () => {
+            const url = shareUrl("board", board.id!);
+            setMsg({ text: (await copyText(url)) ? t("replay.copied", { text: url }) : url });
+          }}>
+            {t("common.link")}
           </button>
         )}
         <button onClick={newBoard}>{t("board.new")}</button>

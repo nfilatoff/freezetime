@@ -116,6 +116,29 @@ export interface Teams {
   own: string | null;
 }
 
+// ---- who is using the app (freezetime/app/access.py) ----
+export interface SessionMember { id: string; nick: string; role: string }
+export interface Session {
+  mode: "local" | "team";
+  local: boolean; // this is the computer the app runs on
+  role: "analyst" | "staff" | "player" | null;
+  can_edit: boolean;
+  need: "token" | "member" | "team_mode" | null; // what a visitor lacks to be let in
+  member: SessionMember | null;
+  team: string | null;
+  members: SessionMember[];
+  share?: { token: string; addresses: string[] }; // the team server's join links, on the analyst's computer only
+}
+
+type Merged = { added: number; updated: number; skipped: number };
+export interface PackResult {
+  boards: Merged;
+  notes?: Merged;
+  playlists?: Merged;
+  team: "added" | "kept" | null;
+  matches: { added: string[]; skipped: string[] };
+}
+
 // ---- our team's profile (freezetime/team.py) ----
 export interface TeamMember { id: string; nick: string; steamid: string; role: string }
 export interface TeamProfile { format: number; name: string; members: TeamMember[]; updated: number }
@@ -532,6 +555,10 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
       /* not JSON */
     }
     if (detail.startsWith("cs2_")) throw new Error(cs2Error(detail));
+    if (detail.startsWith("access_")) {
+      if (res.status === 401) window.dispatchEvent(new Event("freezetime:session"));
+      throw new Error(td(`access.${detail.slice(7)}`, detail));
+    }
     throw new Error(`${res.status}: ${detail}`);
   }
   return res.json() as Promise<T>;
@@ -583,6 +610,17 @@ export const api = {
   teams: () => request<Teams>("/api/teams"),
   teamAlias: (raw: string, name: string | null) => request<{ aliases: Record<string, string> }>("/api/teams/alias", json({ raw, name })),
   teamOwn: (name: string | null) => request<{ own: string | null }>("/api/teams/own", json({ name })),
+  session: () => request<Session>("/api/session"),
+  login: (body: { token?: string; member?: string }) => request<Session>("/api/session", json(body)),
+  logout: () => request<{ ok: boolean }>("/api/session", { method: "DELETE" }),
+  newToken: () => request<Session>("/api/session/token", { method: "POST" }),
+  packExport: async (body: { boards: string[] | null; team: boolean; matches: string[]; notes?: boolean; playlists?: boolean }) => {
+    const res = await fetch("/api/pack/export", json(body));
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? res.statusText);
+    const name = /filename="?([^";]+)/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? "freezetime-pack.zip";
+    return { blob: await res.blob(), name };
+  },
+  packImport: (file: File) => request<PackResult>("/api/pack/import", { method: "PUT", body: file }),
   team: () => request<TeamInfo>("/api/team"),
   saveTeam: (team: TeamProfile) => request<TeamInfo>("/api/team", { ...json(team), method: "PUT" }),
   scoutReport: (q: ScoutQuery) => request<ScoutReport>(`/api/scout/report?${query(q)}`),

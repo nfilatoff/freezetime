@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import json
 import locale
+import os
 import re
 import sys
 import shutil
+import tempfile
 import time
 import warnings
 from functools import lru_cache
@@ -23,10 +25,13 @@ from awpy import data as awpy_data
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 
 from freezetime.aggregate import aggregate
 from freezetime.board import BoardError, create_board, delete_board, list_boards, load_board, update_board
 from freezetime.team import ROLES, TeamError, candidates, load_team, rename_team, save_team
+from freezetime.pack import PackError, export_pack, import_pack
+from freezetime.app import access
 from freezetime.app.archives import is_archive, unpack
 from freezetime.app.cs2 import BIND_COMMAND, SETTLE, CS2Bridge, NoConsole, game_running, steam_account
 from freezetime.app import hlae
@@ -497,12 +502,98 @@ def _map_meta(map_name: str) -> dict:
     }
 
 
-def create_app(out: str | Path = "out") -> FastAPI:
+def create_app(out: str | Path = "out", team: bool = False) -> FastAPI:
+    """``team`` turns on the team server: other computers are let in with the team token (see ``access.py``)."""
     lib = Library(Path(out))
     jobs = JobQueue()
     cs2 = CS2Bridge(lib.setting, lib.set_setting)
     recorder = Recorder(cs2)
     api = FastAPI(title="Freezetime")
+
+    # ---- who is asking ----
+    def team_token() -> str | None:
+        if not team:
+            return None
+        token = lib.setting("team_token")
+        if not token or not access.TOKEN_RE.fullmatch(str(token)):
+            token = access.new_token()
+            lib.set_setting("team_token", token)
+        return token
+
+    def who_is(request: Request, cookies: dict | None = None) -> access.Who:
+        host = request.client.host if request.client else None
+        return access.identify(host, request.cookies if cookies is None else cookies, team_token(), load_team(lib.out)["members"])
+
+    @api.middleware("http")
+    async def guard(request: Request, call_next):
+        """Every /api request passes the rules of ``access.py`` before it reaches an endpoint."""
+        who = who_is(request)
+        refused = access.verdict(who, request.method, request.url.path, team)
+        if refused:
+            return JSONResponse({"detail": refused[1]}, status_code=refused[0])
+        request.state.who = who
+        return await call_next(request)
+
+    def session_payload(who: access.Who) -> dict:
+        profile = load_team(lib.out)
+        public = lambda m: {"id": m["id"], "nick": m["nick"], "role": m["role"]}  # noqa: E731 - no SteamIDs to visitors
+        data = {
+            "mode": "team" if team else "local",
+            "local": who.local,
+            "role": who.role,
+            "can_edit": who.can_edit,
+            "need": who.need if team or who.local else "team_mode",
+            "member": public(who.member) if who.member else None,
+            "team": lib.setting("own_team") or profile["name"],
+            # the roster is shown to pick a nick from, and only to those who hold the token
+            "members": [public(m) for m in profile["members"]] if who.token_ok else [],
+        }
+        if who.local and team:
+            data["share"] = {"token": team_token(), "addresses": access.lan_addresses()}
+        return data
+
+    @api.get("/api/session")
+    def session_get(request: Request) -> dict:
+        return session_payload(who_is(request))
+
+    @api.post("/api/session")
+    def session_post(request: Request, token: str | None = Body(None), member: str | None = Body(None)) -> JSONResponse:
+        """Trade the team token for a cookie and/or say which roster member you are (``""`` forgets it)."""
+        cookies = dict(request.cookies)
+        if token is not None:
+            cookies[access.TOKEN_COOKIE] = token
+        who = who_is(request, cookies)
+        if not who.token_ok:
+            raise HTTPException(401, "access_token")
+        if member is not None:
+            cookies[access.MEMBER_COOKIE] = member
+            who = who_is(request, cookies)
+            if member and who.member is None:
+                raise HTTPException(404, "access_no_member")
+        response = JSONResponse(session_payload(who))
+        keep = {"max_age": 180 * 86400, "httponly": True, "samesite": "strict", "path": "/"}
+        if token is not None and not who.local:
+            response.set_cookie(access.TOKEN_COOKIE, token, **keep)
+        if member:
+            response.set_cookie(access.MEMBER_COOKIE, member, **keep)
+        elif member == "":
+            response.delete_cookie(access.MEMBER_COOKIE, path="/")
+        return response
+
+    @api.delete("/api/session")
+    def session_delete() -> JSONResponse:
+        response = JSONResponse({"ok": True})
+        response.delete_cookie(access.TOKEN_COOKIE, path="/")
+        response.delete_cookie(access.MEMBER_COOKIE, path="/")
+        return response
+
+    @api.post("/api/session/token")
+    def session_new_token(request: Request) -> dict:
+        """A new team token: every link handed out before stops working."""
+        if not team:
+            raise HTTPException(409, "access_no_team_mode")
+        lib.set_setting("team_token", access.new_token())
+        return session_payload(who_is(request))
 
     @api.exception_handler(NoConsole)
     def no_console(_request: Request, e: NoConsole) -> JSONResponse:
@@ -545,7 +636,7 @@ def create_app(out: str | Path = "out") -> FastAPI:
         return {"locale": system_locale()}
 
     @api.get("/api/library")
-    def library() -> dict:
+    def library(request: Request) -> dict:
         matches = []
         for d in lib.extracts():
             manifest = json.loads((d / "manifest.json").read_text(encoding="utf-8"))
@@ -564,6 +655,8 @@ def create_app(out: str | Path = "out") -> FastAPI:
             demos.append({"path": str(p), "name": p.name, "size_mb": round(st.st_size / 2**20, 1), "map": _demo_map(str(p), st.st_mtime),
                           "match_id": p.stem, "uploaded": p.parent == lib.out / UPLOADS,
                           "extracted": (lib.out / p.stem / "manifest.json").exists(), "job": job.id if job else None})
+        if not request.state.who.local:  # the analyst's folders and demo files are nobody else's business
+            return {"out": "", "folders": [], "matches": matches, "demos": []}
         return {"out": str(lib.out.resolve()), "folders": lib.folders(), "matches": matches, "demos": demos}
 
     @api.post("/api/library/folders")
@@ -963,6 +1056,42 @@ def create_app(out: str | Path = "out") -> FastAPI:
         except BoardError as e:
             raise HTTPException(400, str(e)) from e
         return {"deleted": board_id}
+
+    # ---- packs: team work as a .zip, for those who are not on the team server ----
+    def temp_zip() -> Path:
+        fd, name = tempfile.mkstemp(prefix="freezetime-pack-", suffix=".zip")
+        os.close(fd)  # Windows will not delete a file somebody still holds open
+        return Path(name)
+
+    @api.post("/api/pack/export")
+    def pack_export(boards: list[str] | None = Body(None), team: bool = Body(False), matches: list[str] = Body(default_factory=list)) -> FileResponse:
+        """``boards``: ids, or null for every board."""
+        for match_id in matches:
+            lib.match_dir(match_id)
+        tmp = temp_zip()
+        try:
+            export_pack(lib.out, tmp, boards=boards, team=team, matches=matches)
+        except PackError as e:
+            tmp.unlink(missing_ok=True)
+            raise HTTPException(400, str(e)) from e
+        name = time.strftime("freezetime-pack-%Y%m%d-%H%M.zip")
+        return FileResponse(tmp, media_type="application/zip", filename=name, background=BackgroundTask(tmp.unlink, missing_ok=True))
+
+    @api.put("/api/pack/import")
+    async def pack_import(request: Request) -> dict:
+        tmp = temp_zip()
+        try:
+            with tmp.open("wb", buffering=CHUNK) as f:
+                async for chunk in request.stream():
+                    f.write(chunk)
+            result = import_pack(lib.out, tmp)
+        except PackError as e:
+            raise HTTPException(400, str(e)) from e
+        finally:
+            tmp.unlink(missing_ok=True)
+        if result["team"] == "added" and not lib.setting("own_team"):
+            lib.set_setting("own_team", load_team(lib.out)["name"] or None)
+        return result
 
     @api.get("/api/maps")
     def map_list() -> list[str]:
