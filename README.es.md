@@ -95,10 +95,13 @@ En «Biblioteca» añade una carpeta con demos (por ejemplo, `D:\Steam\steamapps
 
 ### Biblioteca
 
+- **Primero las más recientes** — la biblioteca muestra las 10 últimas partidas analizadas; «Mostrar 10 más» añade las siguientes (los filtros se aplican a todas).
 - **Filtros** — por mapa (también para demos sin analizar: el mapa se lee de la cabecera del `.dem` en milisegundos), por equipo y búsqueda por nombre. La casilla «ocultar ya analizadas» quita de la lista las demos que ya están entre las partidas.
 - **Subida** — `.dem` o archivo comprimido: `zip`, `rar`, `7z`, `tar` (incluidos `.tar.gz`/`.tgz`/`.tar.bz2`/`.tar.xz`), `.dem.gz`, `.dem.bz2`, `.dem.xz`, `.dem.zst` sueltos. Los archivos se suben de uno en uno con progreso. El cuerpo de la petición se escribe en `.part` y se renombra solo al terminar la subida, así que una subida interrumpida no aparecerá como demo. Un archivo con el mismo nombre y tamaño que uno ya presente en la biblioteca no se vuelve a subir ni a analizar.
 - **Archivos comprimidos** se extraen con una tarea en segundo plano: solo se toman los `.dem` (se permiten subcarpetas; las rutas dentro del archivo no pueden salir de `out/_uploads/`), el archivo se borra tras la extracción y cada demo entra en la cola de análisis. `zip`, `tar`, `gz`, `bz2`, `xz` se leen con la biblioteca estándar de Python, `.zst` con el paquete `zstandard`, `rar` y `7z` con el `tar.exe` del sistema (bsdtar/libarchive, incluido en Windows 10+).
 - **Borrado** — la cruz de la tarjeta de partida borra la exportación (tablas, caché de repetición, imágenes); con una casilla del diálogo también se puede borrar el `.dem` original. El enlace «borrar» de la lista de demos borra el archivo `.dem`. Por la API solo se borran `.dem` de las carpetas de la biblioteca y de subidas; no se puede borrar una partida o demo que se esté procesando.
+
+**Página de la partida.** La cabecera (equipos, marcador, id) ocupa una línea y las pestañas una fila a la izquierda. Cada pestaña cabe en la ventana sin desplazarse: el radar o el vídeo toma la altura que dejan los controles, las columnas laterales largas (ajustes del clip, lista de highlights, lista de lineups, filtros de mapas) se desplazan por dentro y los paneles de jugadores de la repetición no son más altos que el radar. Las tablas centran las celdas y ajustan el ancho de las columnas a los datos; el texto largo se parte dentro de la celda. En la pestaña Jugadores, un clic en un jugador abre su detalle (`freezetime/player_stats.py`): kills y headshots por arma, precisión (disparos, disparos que dieron a un rival, impactos en la cabeza; un disparo de escopeta cuenta una vez y cada impacto se asocia al último disparo del jugador, porque `player_hurt` nombra algunas armas de otra forma), daño por arma, flashes lanzadas, rivales cegados con el tiempo medio y total de ceguera y cuántos 2 s o más, y compañeros cegados.
 
 Para exportaciones hechas antes de que existieran los fotogramas de repetición, la tarjeta de partida tiene el botón «datos para la repetición». Añade `replay.parquet` desde la demo original en unos segundos. Sin él la repetición también funciona, pero con paso de 0,5 s.
 
@@ -211,6 +214,7 @@ Los mapas fuera del pool (Overpass, Train, Vertigo, …) no tienen configuració
 | `extract.py` | `.dem` → Parquet: datasets de awpy, eventos, instantáneas, `replay.parquet`, `manifest.json`. `add_replay()` añade fotogramas de repetición a exportaciones antiguas. |
 | `context.py` | `load_match()` crea el contexto común. Rondas sin las de cuchillo. steamid → equipo (sin entrenadores). Lado del equipo en cada ronda. Tabla `tr` (ronda × equipo: lado, victoria, compra, compra del rival). Paso y desfase de las instantáneas. `with_round()` asocia las filas con `tick` a una ronda. `round_context()`: qué pasó antes de la ronda (pistolas, racha de derrotas, vivos en la planta y al final). `with_man_diff()`: superioridad o inferioridad numérica en el momento del evento. |
 | `team_stats.py` | Resumen, lados, compras, motivos de victoria, aperturas, trades, bomba como T y como CT. |
+| `player_stats.py` | Un jugador de una partida: kills por arma, precisión (disparos e impactos), flashes y tiempo de ceguera. |
 | `tactics.py` | Ejecuciones T, setups CT, rotaciones. `SiteZoner` clasifica las posiciones según la configuración del mapa o la heurística de reserva. |
 | `maps/` | Configuraciones de mapas (`<map>.json`) y su carga; búsqueda de zona, grupo y sitio de un punto mediante un ráster. |
 | `mapgen.py` | Crea la configuración de un mapa a partir de demos (`maps derive`). |
@@ -414,7 +418,7 @@ Pestaña de partida «Granadas y lineups» y página «Lineups» (lanzamientos d
 
 Todos los umbrales son constantes al principio de los módulos; se cambian ahí mismo.
 
-**Rondas.** Las rondas de cuchillo se excluyen. Una fila pertenece a una ronda si su tick está en `[start_tick, end_tick]` (`with_round`). Los ticks entre rondas se descartan. Si la grabación de la demo empezó a mitad de la primera ronda, su `start_tick` está vacío y se sustituye por 0.
+**Rondas.** Las rondas de cuchillo se excluyen. Una fila pertenece a una ronda si su tick está en `[start_tick, end_tick]` (`with_round`). Los ticks entre rondas se descartan. Si la primera ronda no tiene `start_tick` (la grabación empezó en el calentamiento o durante la ronda), la ronda empieza un tiempo de congelación habitual (la mediana de las demás rondas) antes de su fin, para que las kills del calentamiento y de una ronda de cuchillo no grabada no cuenten en la ronda 1.
 
 **Lados.** El lado de un equipo en una ronda es la mayoría según las instantáneas de sus jugadores en esa ronda. El equipo es `team_clan_name` de `players`. Los entrenadores — filas de `stats` sin kills, muertes, asistencias ni daño — se excluyen de los jugadores y de las medias.
 
@@ -463,7 +467,7 @@ Un punto se busca entre los polígonos de su nivel (por `z`). Si las zonas se so
 ## Limitaciones y particularidades de los datos
 
 - **Granadas sin lanzador.** En `grenades`/`smokes`/`fires` el `thrower_*` está vacío; el lanzador se reconstruye (ver «Ejecuciones T»). Si `weapon_fire` y `shots` no coinciden fila a fila, las tácticas y el mapa de granadas no están disponibles para la partida: en la CLI habrá un error, en la aplicación, un mensaje.
-- **`start_tick` vacío en la primera ronda** de algunas demos (la grabación empezó durante la ronda): se sustituye por 0.
+- **`start_tick` vacío en la primera ronda** de algunas demos (la grabación empezó en el calentamiento o durante la ronda): la ronda empieza una congelación mediana antes de su fin; antes se usaba el tick 0 y la ronda 1 recibía las kills del calentamiento y de la ronda de cuchillo.
 - **Los eventos guardan los campos como cadenas**; `x`/`y`/`z` se convierten a número.
 - **Las instantáneas** van con paso de 0,5 s (`Match.snap_step`, 32 ticks a 64 tick). En algunas demos los ticks de las instantáneas empiezan en 1 y no en 0 (`Match.snap_offset`); antes, por eso, los setups, rotaciones y `viz frame/gif` salían vacíos en esas demos.
 - **Progreso del análisis.** awpy no informa del progreso dentro del análisis, así que se muestra por etapas. La primera etapa («parsing demo») es la más larga.

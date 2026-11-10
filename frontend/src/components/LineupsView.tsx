@@ -1,6 +1,7 @@
 // Grenade lineups: every throw of the chosen demos, grouped into lineups (same grenade,
 // same spot, same aim, same landing), on the radar and in a table, with export to CSV,
 // JSON and a CS2 practice config, and buttons that put the player on the lineup in CS2.
+import { useFitHeight, useFitRest } from "../fit";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type CS2Status, type Lineup, type MatchOverview, type Throw, type Throws } from "../api";
 import { download } from "../clipExport";
@@ -260,7 +261,10 @@ export function LineupsView({ initial, scope }: { initial?: MatchOverview; scope
   const selected = groups.find((g) => g.key === selectedKey) ?? null;
 
   const n = assets?.meta.levels.length ?? 1;
-  const size = Math.min(720, Math.floor((window.innerWidth - 480) / n));
+  const fit = useFitHeight(canvasRef, ".clip-main");
+  const sideRef = useRef<HTMLDivElement>(null);
+  const sideH = useFitRest(sideRef); // the settings column scrolls inside, next to the picture
+  const size = Math.max(240, Math.min(720, Math.floor((window.innerWidth - 480) / n), fit));
   const callouts = useCalloutMode();
   useEffect(() => {
     if (canvasRef.current && assets) drawLineups(canvasRef.current, assets, groups, selected, size, callouts !== "off");
@@ -317,7 +321,7 @@ export function LineupsView({ initial, scope }: { initial?: MatchOverview; scope
   const mapError2 = mapError && map ? mapError : null;
   return (
     <div className="lineups">
-      <div className="clip-side">
+      <div className="clip-side" ref={sideRef} style={Number.isFinite(sideH) ? { maxHeight: sideH, overflowY: "auto" } : undefined}>
         <h3>{t("common.demos")}</h3>
         <MatchPicker map={map} setMap={(m) => { setMap(m); setSelectedKey(null); }} ids={ids} setIds={setIds} onError={setError} />
 
@@ -424,7 +428,7 @@ export function LineupsView({ initial, scope }: { initial?: MatchOverview; scope
             </table>
           </div>
         )}
-        <div className="table-wrap" style={{ maxHeight: 420 }}>
+        <div className="table-wrap" style={{ maxHeight: 220 }}>
           <table>
             <thead>
               <tr><th>{t("lu.th.nade")}</th><th>{t("lu.th.from")}</th><th>{t("lu.th.to")}</th><th>{t("lu.th.count")}</th><th>{t("lu.th.tech")}</th><th>{t("lu.th.when")}</th><th>{t("lu.th.who")}</th><th /></tr>

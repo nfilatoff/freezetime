@@ -69,6 +69,32 @@ export interface MatchOverview {
   players: Row[];
 }
 
+export interface WeaponStats {
+  weapon: string;
+  kills: number;
+  headshots: number;
+  shots: number;
+  hits: number; // shots that hit an enemy
+  head_hits: number;
+  damage: number;
+  accuracy: number | null; // % of shots
+  hs_accuracy: number | null; // % of hits in the head
+}
+
+export interface PlayerStats {
+  weapons: WeaponStats[];
+  accuracy: { shots: number; hits: number; head_hits: number; accuracy: number | null; hs_accuracy: number | null };
+  flashes: {
+    thrown: number;
+    enemies_blinded: number;
+    enemy_blind_avg: number | null; // seconds
+    enemy_blind_total: number;
+    enemies_long: number; // blinded 2 s or more
+    teammates_blinded: number;
+    teammate_blind_avg: number | null;
+  };
+}
+
 export interface TacticsResult {
   tables: Tables | null;
   error: string | null;
@@ -625,6 +651,7 @@ export const api = {
   jobs: () => request<Job[]>("/api/jobs"),
   buildReplayData: (id: string) => request<{ job: number }>(`${m(id)}/replay-data`, { method: "POST" }),
   match: (id: string) => request<MatchOverview>(m(id)),
+  playerStats: (id: string) => request<Record<string, PlayerStats>>(`${m(id)}/player-stats`),
   tactics: (id: string) => request<TacticsResult>(`${m(id)}/tactics`),
   points: (id: string) => request<Points>(`${m(id)}/points`),
   movement: (id: string, f: MovementFilter) => request<Movement>(`${m(id)}/movement?${query(f)}`),

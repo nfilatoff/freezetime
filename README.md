@@ -95,10 +95,13 @@ In "Library", add a folder with demos (for example, `D:\Steam\steamapps\common\C
 
 ### Library
 
+- **Newest first** — the library shows the 10 most recently parsed matches; "Show 10 more" adds the next ones (filters apply to all matches).
 - **Filters** — by map (also for unparsed demos: the map is read from the `.dem` header in milliseconds), by team, and search by name. The "hide already parsed" checkbox removes demos that are already among the matches from the list.
 - **Upload** — `.dem` or an archive: `zip`, `rar`, `7z`, `tar` (including `.tar.gz`/`.tgz`/`.tar.bz2`/`.tar.xz`), single `.dem.gz`, `.dem.bz2`, `.dem.xz`, `.dem.zst`. Files are uploaded one at a time with progress. The request body is written to `.part` and renamed only after the upload completes, so an interrupted upload won't show up as a demo. A file with the same name and size as one already in the library is not uploaded or parsed again.
 - **Archives** are extracted by a background job: only `.dem` files are taken from the archive (nested folders are allowed, paths inside the archive can't escape `out/_uploads/`), the archive itself is deleted after extraction, and each demo is queued for parsing. `zip`, `tar`, `gz`, `bz2`, `xz` are read with the Python standard library, `.zst` with the `zstandard` package, `rar` and `7z` with the system `tar.exe` (bsdtar/libarchive, included in Windows 10+).
 - **Deletion** — the cross on a match card deletes the parsed output (tables, replay cache, images); a checkbox in the dialog also deletes the source `.dem`. The "delete" link in the demo list deletes the `.dem` file. The API only deletes `.dem` files from library and upload folders; a match or demo currently being processed can't be deleted.
+
+**Match page.** The header (teams, score, match id) is one line and the tabs sit in one row on the left. Every tab fits the window without scrolling: the radar or video takes the height the controls leave, long side columns (clip settings, highlight list, lineups list, map filters) scroll inside, and the replay's player panels are as tall as the radar. Tables center their cells and size their columns by content; long text wraps inside the cell. On the Players tab a click on a player opens their detail (`freezetime/player_stats.py`): kills and headshots by weapon, accuracy (shots, shots that hit an enemy, hits in the head; a shotgun shot counts once, each hit is tied to the player's last shot because `player_hurt` names some guns differently), damage by weapon, flashes thrown, enemies blinded with the average and total blind time and how many for 2 s or more, and teammates blinded.
 
 For outputs created before replay frames existed, the match card has a "replay data" button. It adds `replay.parquet` from the source demo in a few seconds. The replay works without it too, but with a 0.5 s step.
 
@@ -211,6 +214,7 @@ Maps outside the pool (Overpass, Train, Vertigo, …) have no config. `tactics` 
 | `extract.py` | `.dem` → Parquet: awpy datasets, events, snapshots, `replay.parquet`, `manifest.json`. `add_replay()` adds replay frames to old outputs. |
 | `context.py` | `load_match()` builds the shared context. Rounds without knife rounds. steamid → team (without coaches). Team side in every round. The `tr` table (round × team: side, win, buy, opponent buy). Snapshot step and offset. `with_round()` binds rows with a `tick` to a round. `round_context()`: what happened before the round (pistol, loss streak, alive at plant and at the end). `with_man_diff()`: man advantage or disadvantage at the moment of an event. |
 | `team_stats.py` | Summary, sides, buys, win reasons, openings, trades, bomb on T and CT. |
+| `player_stats.py` | A player of one match: kills by weapon, accuracy (shots and hits), flashes and blind time. |
 | `tactics.py` | T executes, CT setups, rotations. `SiteZoner` classifies positions by the map config or by the fallback heuristic. |
 | `maps/` | Map configs (`<map>.json`) and their loading; finding the zone, group and site of a point via a raster. |
 | `mapgen.py` | Builds a map config from demos (`maps derive`). |
@@ -414,7 +418,7 @@ The "Grenades and lineups" match tab and the "Lineups" page (throws from several
 
 All thresholds are constants at the top of the modules; change them there.
 
-**Rounds.** Knife rounds are excluded. A row belongs to a round if its tick lies within `[start_tick, end_tick]` (`with_round`). Ticks between rounds are dropped. If the demo recording started in the middle of the first round, its `start_tick` is empty and replaced with 0.
+**Rounds.** Knife rounds are excluded. A row belongs to a round if its tick lies within `[start_tick, end_tick]` (`with_round`). Ticks between rounds are dropped. If the demo has no `start_tick` for the first round (recording started in warmup or during the round), the round starts one usual freeze time (the median of the other rounds) before its freeze end, so warmup and unrecorded knife-round kills don't count in round 1.
 
 **Sides.** A team's side in a round is the majority over its players' snapshots in that round. The team is `team_clan_name` from `players`. Coaches — `stats` rows with no kills, deaths, assists or damage — are excluded from players and averages.
 
@@ -463,7 +467,7 @@ A point is looked up among the polygons of its level (by `z`). If zones overlap,
 ## Limitations and data quirks
 
 - **Grenades without a thrower.** `grenades`/`smokes`/`fires` have an empty `thrower_*`; the thrower is restored (see "T executes"). If `weapon_fire` and `shots` don't match row by row, tactics and the grenade map are unavailable for the match: the CLI shows an error, the app shows a message.
-- **Empty `start_tick` of the first round** in some demos (recording started during the round) — replaced with 0.
+- **Empty `start_tick` of the first round** in some demos (recording started in warmup or during the round) — the round starts one median freeze time before its freeze end; tick 0 used to give round 1 the warmup's and knife round's kills.
 - **Events store fields as strings**; `x`/`y`/`z` are cast to numbers.
 - **Snapshots** come at a 0.5 s step (`Match.snap_step`, 32 ticks at 64 tick). In some demos snapshot ticks start at 1, not 0 (`Match.snap_offset`); previously this left setups, rotations and `viz frame/gif` empty on such demos.
 - **Parsing progress.** awpy doesn't report progress inside parsing, so it's shown by stages. The first stage ("parsing demo") is the longest.

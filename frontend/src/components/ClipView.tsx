@@ -2,6 +2,7 @@
 // overlaid on a shared round clock or played one after another. A frame is a header (who,
 // against whom, round clock), the radar with a grid, and a footer with a caption computed
 // from the map's callouts and a legend. Exports go into a zip with a text file of the facts.
+import { useFitHeight, useFitRest } from "../fit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type MatchOverview, type Replay, type Side } from "../api";
 import { canEncodeVideo, download, exportGif, exportMp4, zipWith } from "../clipExport";
@@ -720,7 +721,10 @@ export function ClipView({ initial, scope }: { initial?: MatchOverview; scope?: 
   const lay = useMemo(() => frameLayout(outSize, levels.length, clip?.summary.caption ?? null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [outSize, levels.length, clip?.summary.caption]);
-  const scale = Math.min(boxWidth / lay.width, (window.innerHeight - 130) / lay.height);
+  const fit = useFitHeight(canvasRef, ".clip-main");
+  const sideRef = useRef<HTMLDivElement>(null);
+  const sideH = useFitRest(sideRef); // the settings column scrolls inside, next to the picture
+  const scale = Math.max(0.3, Math.min(boxWidth / lay.width, fit / lay.height));
 
   const render = useCallback(() => {
     const c = canvasRef.current;
@@ -815,7 +819,7 @@ export function ClipView({ initial, scope }: { initial?: MatchOverview; scope?: 
 
   return (
     <div className="clip">
-      <div className="clip-side">
+      <div className="clip-side" ref={sideRef} style={Number.isFinite(sideH) ? { maxHeight: sideH, overflowY: "auto" } : undefined}>
         <h3>{t("common.demos")}</h3>
         <MatchPicker map={map} setMap={setMap} ids={matchIds} setIds={setMatchIds} onError={setError} />
 

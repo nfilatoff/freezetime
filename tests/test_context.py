@@ -73,7 +73,12 @@ def test_missing_first_round_start_is_filled(dust2_mini, tmp_path):
     rounds = pl.read_parquet(d / "rounds.parquet")
     rounds.with_columns(pl.when(pl.col("round_num") == 1).then(None).otherwise(pl.col("start_tick")).alias("start_tick")).write_parquet(d / "rounds.parquet")
     m = load_match(d)
-    assert m.rounds.filter(pl.col("round_num") == 1)["start_tick"].item() == 0
+    # one usual freeze time before its freeze end, not tick 0: warmup and an unrecorded knife round stay out
+    freeze = int((rounds["freeze_end_tick"] - rounds["start_tick"]).filter(rounds["round_num"] > 1).median())
+    first = rounds.filter(pl.col("round_num") == 1).row(0, named=True)
+    assert m.rounds.filter(pl.col("round_num") == 1)["start_tick"].item() == max(0, first["freeze_end_tick"] - freeze)
+    early = pl.DataFrame({"tick": [max(0, first["freeze_end_tick"] - freeze - 1), first["freeze_end_tick"]]})
+    assert with_round(early, m.rounds)["tick"].to_list() == [first["freeze_end_tick"]] or first["freeze_end_tick"] - freeze <= 0
     assert json.loads((d / "manifest.json").read_text())["tick_rate"] == m.tick_rate
 
 

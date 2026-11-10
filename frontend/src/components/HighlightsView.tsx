@@ -1,5 +1,6 @@
 // Highlights of one match: found automatically (aces, multi-kills, clutches, rare kills) or made by
 // hand from a round window, previewed on the radar and downloaded as MP4/GIF, one by one or as a zip.
+import { useFitHeight, useFitRest } from "../fit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type Highlight, type MatchOverview, type Replay } from "../api";
 import { go } from "../router";
@@ -123,7 +124,10 @@ export function HighlightsView({ match, round, at }: { match: MatchOverview; rou
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const scale = frame ? Math.min(boxWidth / frame.width, (window.innerHeight - 150) / frame.height, 1.5) : 1;
+  const fit = useFitHeight(canvasRef, ".clip-main");
+  const sideRef = useRef<HTMLDivElement>(null);
+  const sideH = useFitRest(sideRef); // the settings column scrolls inside, next to the picture
+  const scale = frame ? Math.max(0.3, Math.min(boxWidth / frame.width, fit / frame.height, 1.5)) : 1;
 
   const tRef = useRef(0);
   const [T, setT] = useState(0);
@@ -247,7 +251,7 @@ export function HighlightsView({ match, round, at }: { match: MatchOverview; rou
 
   return (
     <div className="clip">
-      <div className="clip-side">
+      <div className="clip-side" ref={sideRef} style={Number.isFinite(sideH) ? { maxHeight: sideH, overflowY: "auto" } : undefined}>
         <h3>{t("highlights.title")} <span className="muted small">{data ? list.length : ""}</span></h3>
         <div className="row small">
           <select value={kind} onChange={(e) => setKind(e.target.value)}>

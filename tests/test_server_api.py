@@ -184,3 +184,10 @@ def test_zone_editor_saves_a_map(out, tmp_path, monkeypatch):
     status, meta = call(app, "PUT", "/api/maps/de_dust2/zones", body={"zones": [zone]})
     maps.load_map_config.cache_clear()
     assert status == 200 and [z["name"] for z in meta["zones"]] == ["Box"] and meta["sites"]
+
+
+def test_player_stats_route(out):
+    app = create_app(out)
+    status, stats = call(app, "GET", "/api/matches/dust2_mini/player-stats")
+    assert status == 200 and len(stats) == 10 and all({"weapons", "accuracy", "flashes"} <= set(p) for p in stats.values())
+    assert call(app, "GET", "/api/matches/nope/player-stats")[0] == 404

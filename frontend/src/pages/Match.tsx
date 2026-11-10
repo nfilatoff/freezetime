@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { api, radarUrl, type MatchOverview, type ScoutTeam, type TacticsResult, type TimelineRound } from "../api";
+import { api, radarUrl, type MatchOverview, type Row, type ScoutTeam, type TacticsResult, type TimelineRound } from "../api";
 import { go } from "../router";
 import { DataTable } from "../components/DataTable";
+import { PlayerStatsPanel } from "../components/PlayerStats";
 import { ReplayView } from "../components/Replay";
 import { MapsView } from "../components/MapsView";
 import { ClipView } from "../components/ClipView";
@@ -18,8 +19,6 @@ const TABS: [string, Key][] = [
   ["maps", "tab.maps"],
   ["highlights", "tab.highlights"],
   ["clip", "tab.clip"],
-];
-const MORE_TABS: [string, Key][] = [
   ["players", "tab.players"],
   ["tactics", "tab.tactics"],
   ["lineups", "tab.lineups"],
@@ -47,7 +46,7 @@ export function MatchPage({ id, tab, round, at }: { id: string; tab: string; rou
   const teams = Object.entries(match.score);
 
   return (
-    <div className="page">
+    <div className="page match-page">
       <div className="mhero" style={{ backgroundImage: `url(${radarUrl(match.map)})` }}>
         <div className="crumbs">
           <a href="#/">{t("nav.library")}</a>
@@ -78,23 +77,9 @@ export function MatchPage({ id, tab, round, at }: { id: string; tab: string; rou
             {t(label)}
           </a>
         ))}
-        <span className="tabs-more">
-          {MORE_TABS.map(([key, label]) => (
-            <a key={key} href={`#/match/${encodeURIComponent(id)}/${key}`} className={tab === key ? "active" : ""}>
-              {t(label)}
-            </a>
-          ))}
-        </span>
       </div>
       {tab === "overview" && <Overview match={match} />}
-      {tab === "players" && (
-        <DataTable
-          rows={match.players}
-          columns={["name", "team", "kills", "deaths", "assists", "adr", "kast", "headshot_kills", "opening_kills", "opening_deaths",
-            "traded_deaths", "clutches_won", "clutches_played", "utility_damage", "flashes_thrown", "enemies_flashed",
-            "multikill_3k", "multikill_4k", "multikill_5k"].filter((c) => match.players[0] && c in match.players[0])}
-        />
-      )}
+      {tab === "players" && <Players match={match} />}
       {tab === "tactics" && <Tactics id={id} />}
       {tab === "replay" && <ReplayView match={match} round={round ?? match.timeline[0]?.round ?? 1} at={at} />}
       {tab === "maps" && <MapsView match={match} />}
@@ -162,14 +147,15 @@ function MatchInsights({ id }: { id: string }) {
   }, [id]);
   if (!data) return <div className="muted">{t("common.loading")}</div>;
   return (
-    <>
+    // the two teams side by side: the overview fits the window
+    <div className="insights-pair">
       {Object.entries(data).map(([team, ins]) => (
         <div key={team}>
           <h3>{team}</h3>
           <InsightCards cards={ins.cards} limit={4} />
         </div>
       ))}
-    </>
+    </div>
   );
 }
 
@@ -254,5 +240,21 @@ function Tactics({ id }: { id: string }) {
         </>
       )}
     </div>
+  );
+}
+
+/** The scoreboard; a click on a player opens their weapons, accuracy and flashes. */
+function Players({ match }: { match: MatchOverview }) {
+  const [pick, setPick] = useState<Row | null>(null);
+  const columns = ["name", "team", "kills", "deaths", "assists", "adr", "kast", "headshot_kills", "opening_kills", "opening_deaths",
+            "traded_deaths", "clutches_won", "clutches_played", "utility_damage", "flashes_thrown", "enemies_flashed",
+            "multikill_3k", "multikill_4k", "multikill_5k"].filter((c) => match.players[0] && c in match.players[0]);
+  return (
+    <>
+      <DataTable rows={match.players} columns={columns} onRowClick={(r) => setPick(pick?.steamid === r.steamid ? null : r)}
+        selected={(r) => r.steamid === pick?.steamid} />
+      {!pick && <div className="muted small">{t("ps.pick")}</div>}
+      {pick && <PlayerStatsPanel key={String(pick.steamid)} matchId={match.id} player={pick} onClose={() => setPick(null)} />}
+    </>
   );
 }

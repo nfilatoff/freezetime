@@ -1,3 +1,4 @@
+import { useFitHeight, useFitRest } from "../fit";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type MatchOverview, type Movement, type MovementFilter, type Points, type Row } from "../api";
 import { go } from "../router";
@@ -252,7 +253,11 @@ export function HeatmapPanel({ source }: { source: HeatSource }) {
   const rows = useMemo(() => (points ? selectRows(points, mode, f, types) : []), [points, mode, f, types]);
 
   const n = assets?.meta.levels.length ?? 1;
-  const size = Math.min(760, Math.floor((window.innerWidth - 80) / n));
+  const fit = useFitHeight(canvasRef, ".maps-stage");
+  const controlsRef = useRef<HTMLDivElement>(null);
+  const controlsH = useFitRest(controlsRef); // a short window: the filters scroll inside their column
+  const wide = !window.matchMedia("(max-width: 1100px)").matches; // the filters column takes ~480 px beside the radar
+  const size = Math.max(300, Math.min(760, Math.floor((window.innerWidth - (wide ? 620 : 80)) / n), fit));
   useEffect(() => {
     if (canvasRef.current && assets) render(canvasRef.current, assets, mode, rows, movement, size, { ...view, callouts: callouts !== "off" });
   }, [assets, mode, rows, movement, size, view, callouts]);
@@ -284,7 +289,9 @@ export function HeatmapPanel({ source }: { source: HeatSource }) {
   };
 
   return (
-    <div>
+    // filters in a column on the left, the radar next to them: all of it fits the window
+    <div className="maps-layout">
+      <div className="maps-controls" ref={controlsRef} style={Number.isFinite(controlsH) && !window.matchMedia("(max-width: 1100px)").matches ? { maxHeight: controlsH, overflowY: "auto" } : undefined}>
       <div className="filters">
         <span className="seg wrap">
           {MODES.map((m) => (
@@ -389,6 +396,8 @@ export function HeatmapPanel({ source }: { source: HeatSource }) {
         <span className="muted">{count}</span>
         {roundsShown !== null && <SampleBadge rounds={roundsShown} />}
       </div>
+      </div>
+      <div className="maps-stage">
       {mode.source === "utility" && points.utility_error && <div className="warn">{t("maps.nadesUnavailable", { error: points.utility_error })}</div>}
       <canvas
         ref={canvasRef} width={size * n * dpr} height={size * dpr} style={{ width: size * n, height: size, cursor: mode.source === "movement" ? undefined : "pointer" }}
@@ -397,6 +406,7 @@ export function HeatmapPanel({ source }: { source: HeatSource }) {
       <div className="muted small">
         {td(`mode.${mode.key}.note`, "")}
         {f.side ? t("maps.sideNote", { side: sideShort(f.side) }) : ""}
+      </div>
       </div>
     </div>
   );

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type BoardMark, type BoardPos, type MatchOverview, type Note, type Replay } from "../api";
 import { go } from "../router";
 import { PEN_COLORS, PEN_WIDTHS, boardFromFrame, drawMarks, emptyBoard, hitTest, newId, startMark, stashDraft, strayMark, stretchMark } from "../board";
+import { useFitHeight } from "../fit";
 import { CT_COLOR, RADAR_SIZE, T_COLOR, levelLabel, levelOf, panelLevels, sideColor, sideShort, useMapAssets, worldToPx } from "../radar";
 import {
   BOMB_TIME, NADE_COLORS, ROUND_TIME, bombState, drawRound, fmtClock, frameAt, killAt, loadReplay, playerStates, throwAt, weaponName, type PlayerState,
@@ -138,7 +139,8 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
   );
 
   const levels = assets ? panelLevels(assets.meta, assets.meta.levels.length > 1 ? view : 0) : [0];
-  const size = Math.max(320, Math.min(Math.floor(boxWidth / levels.length), window.innerHeight - 230));
+  const fit = useFitHeight(canvasRef, ".replay");
+  const size = Math.max(240, Math.min(Math.floor(boxWidth / levels.length), fit));
 
   const render = useCallback(() => {
     const c = canvasRef.current;
@@ -387,7 +389,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
       </div>
 
       <div className="replay-body">
-        <TeamPanel states={states.filter((s) => s.p.side === "counter-terrorist")} title={data?.teams["counter-terrorist"] ?? "CT"} color={CT_COLOR} onCopy={copyPlayer} />
+        <TeamPanel states={states.filter((s) => s.p.side === "counter-terrorist")} title={data?.teams["counter-terrorist"] ?? "CT"} color={CT_COLOR} onCopy={copyPlayer} height={size} />
         <div className="replay-stage" ref={boxRef}>
           {!data || !assets ? (
             <div className="muted" style={{ height: size }}>{t("replay.loadingRound")}</div>
@@ -419,7 +421,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
             </div>
           )}
         </div>
-        <TeamPanel states={states.filter((s) => s.p.side === "terrorist")} title={data?.teams.terrorist ?? "T"} color={T_COLOR} onCopy={copyPlayer} />
+        <TeamPanel states={states.filter((s) => s.p.side === "terrorist")} title={data?.teams.terrorist ?? "T"} color={T_COLOR} onCopy={copyPlayer} height={size} />
       </div>
 
       {data && (
@@ -539,9 +541,10 @@ function Clock({ r, tick }: { r: Replay; tick: number }) {
   return <span className="clock">{fmtClock(ROUND_TIME - (tick - r.freeze_end_tick) / r.tick_rate)}</span>;
 }
 
-function TeamPanel({ states, title, color, onCopy }: { states: PlayerState[]; title: string; color: string; onCopy: (s: PlayerState) => void }) {
+function TeamPanel({ states, title, color, onCopy, height }: { states: PlayerState[]; title: string; color: string; onCopy: (s: PlayerState) => void; height: number }) {
+  // as tall as the radar at most, so the players never push the timeline and controls off the screen
   return (
-    <div className="team-panel">
+    <div className="team-panel" style={{ maxHeight: height }}>
       <div className="team-title" style={{ color }}>{title}</div>
       {states.map((s) => (
         <div

@@ -19,9 +19,10 @@ interface Props {
   title?: string;
   maxHeight?: number;
   onRowClick?: (row: Row) => void;
+  selected?: (row: Row) => boolean;
 }
 
-export function DataTable({ rows, columns, title, maxHeight, onRowClick }: Props) {
+export function DataTable({ rows, columns, title, maxHeight, onRowClick, selected }: Props) {
   const cols = columns ?? (rows[0] ? Object.keys(rows[0]).filter((c) => !c.includes("steamid")) : []);
   const [sort, setSort] = useState<{ col: string; desc: boolean } | null>(null);
   const sorted = useMemo(() => {
@@ -60,7 +61,7 @@ export function DataTable({ rows, columns, title, maxHeight, onRowClick }: Props
             </thead>
             <tbody>
               {sorted.map((r, i) => (
-                <tr key={i} onClick={onRowClick ? () => onRowClick(r) : undefined} className={onRowClick ? "clickable" : ""}>
+                <tr key={i} onClick={onRowClick ? () => onRowClick(r) : undefined} className={`${onRowClick ? "clickable" : ""} ${selected?.(r) ? "sel" : ""}`}>
                   {cols.map((c) => (
                     <td key={c} className={typeof r[c] === "number" ? "num" : ""}>
                       {fmt(r[c])}

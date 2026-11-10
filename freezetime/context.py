@@ -160,13 +160,17 @@ def _base_match(directory: Path, _stamps: tuple) -> Match:
     )
 
     # Ticks inside a knife round fall past the previous round's end_tick and are dropped by with_round.
+    # Some demos leave round 1's start_tick null (recording began in warmup or mid-round). Counting it
+    # from tick 0 would give round 1 the warmup's and an unrecorded knife round's kills, so the round
+    # starts one usual freeze time before its freeze end (the median of the other rounds).
+    freeze = (data["rounds"]["freeze_end_tick"] - data["rounds"]["start_tick"]).drop_nulls().median()
+    missing_start = (pl.col("freeze_end_tick") - int(freeze)).clip(lower_bound=0) if freeze is not None else pl.lit(0)
     rounds = (
         data["rounds"]
         .filter(~pl.col("is_knife_round"))
         .select(
             "round_num",
-            # Some demos start recording after round 1 began, leaving its start_tick null.
-            pl.col("start_tick").fill_null(0),
+            pl.col("start_tick").fill_null(missing_start).cast(pl.Int32),
             "freeze_end_tick",
             "end_tick",
             "winner_side",

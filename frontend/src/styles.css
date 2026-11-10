@@ -186,14 +186,16 @@ table.demos td.status { width: 280px; }
 /* ---------- Tables ---------- */
 .table-block { margin-bottom: 10px; }
 .table-wrap { overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+/* every table: centred cells, columns as wide as their content, long text wraps inside the cell */
+table { border-collapse: collapse; width: 100%; font-size: 13px; table-layout: auto; }
 th {
-  position: sticky; top: 0; background: var(--panel2); text-align: left; padding: 9px 10px;
+  position: sticky; top: 0; background: var(--panel2); text-align: center; vertical-align: middle; padding: 9px 10px;
   font: 700 11px var(--head); text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--muted); cursor: pointer; white-space: nowrap; border-bottom: 1px solid var(--line2);
+  color: var(--muted); cursor: pointer; white-space: normal; overflow-wrap: break-word; border-bottom: 1px solid var(--line2);
 }
 th:hover { color: var(--text); }
-td { padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: center; vertical-align: middle; white-space: normal; overflow-wrap: break-word; }
+td.num { text-align: center; }
 tbody tr:last-child td { border-bottom: 0; }
 tbody tr:hover td { background: rgba(255, 255, 255, 0.025); }
 tr.clickable:hover td { background: var(--accent-dim); cursor: pointer; }
@@ -203,7 +205,9 @@ tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 /* ---------- Match hero ---------- */
 .mhero {
   position: relative; overflow: hidden; border-radius: 14px; border: 1px solid var(--line);
-  background: #101010 center 45% / cover no-repeat; margin-bottom: 4px; padding: 16px 24px 22px;
+  background: #101010 center 45% / cover no-repeat; margin-bottom: 4px; padding: 8px 18px;
+  /* one line: where we are | teams and score | match id, so the tabs below get the window's height */
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px;
 }
 .mhero::before {
   content: ""; position: absolute; inset: 0;
@@ -212,20 +216,20 @@ tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .mhero > * { position: relative; z-index: 1; }
 .crumbs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--muted); font: 700 12px var(--head); text-transform: uppercase; letter-spacing: 0.05em; }
 .match-map { color: var(--text); }
-.mhero-main { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 28px; margin-top: 18px; }
-.mteam { font: 700 28px/1.1 var(--head); text-transform: uppercase; overflow-wrap: anywhere; }
+.mhero-main { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px; }
+.mteam { font: 700 18px/1.1 var(--head); text-transform: uppercase; overflow-wrap: anywhere; }
 .mteam.a { text-align: right; }
 .mteam a { color: inherit; }
 .mteam a:hover { color: var(--accent); }
-.mscore { display: flex; align-items: center; gap: 16px; font: 700 54px/1 var(--head); font-variant-numeric: tabular-nums; }
-.mscore .vs { font-size: 28px; color: var(--muted); }
+.mscore { display: flex; align-items: center; gap: 10px; font: 700 30px/1 var(--head); font-variant-numeric: tabular-nums; }
+.mscore .vs { font-size: 18px; color: var(--muted); }
 .mscore .win { color: var(--accent); text-shadow: 0 0 28px rgba(255, 85, 0, 0.45); }
 .mscore .lose { color: var(--muted); }
-.mhero-note { text-align: center; margin-top: 12px; color: var(--muted); font-size: 12px; }
+.mhero-note { text-align: right; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.tabs { position: sticky; top: 56px; z-index: 8; display: flex; gap: 2px; margin: 0 0 16px; border-bottom: 1px solid var(--line); background: var(--bg); overflow-x: auto; }
+.tabs { position: sticky; top: 56px; z-index: 8; display: flex; gap: 2px; margin: 0 0 10px; border-bottom: 1px solid var(--line); background: var(--bg); overflow-x: auto; }
 .tabs a {
-  padding: 13px 16px 11px; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap;
+  padding: 9px 14px 8px; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap;
   font: 700 12.5px var(--head); text-transform: uppercase; letter-spacing: 0.05em;
 }
 .tabs a:hover { color: var(--text); }
@@ -260,7 +264,7 @@ tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .replay-body { display: flex; gap: 12px; align-items: flex-start; }
 .replay-stage { flex: 1; min-width: 0; display: flex; justify-content: center; }
 .replay-stage canvas { display: block; border-radius: 10px; border: 1px solid var(--line); }
-.team-panel { width: 200px; flex: none; }
+.team-panel { width: 200px; flex: none; overflow-y: auto; }
 .team-title { font: 700 13px var(--head); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pl { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; }
 .pl.dead { opacity: 0.4; }
@@ -311,7 +315,7 @@ tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .kc-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
 .kc-tags span, .kc-flag { background: var(--accent-dim); color: #ff9a5c; padding: 0 6px; border-radius: 4px; margin-right: 4px; }
 .kc-table { margin: 4px 0; font-size: 12px; }
-.kc-table td { padding: 1px 4px 1px 0; border: none; }
+.kc-table td { padding: 1px 4px 1px 0; border: none; text-align: left; }
 
 /* ---------- Filters / pickers ---------- */
 .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
@@ -631,3 +635,26 @@ fieldset.plain { border: none; padding: 0; margin: 0; min-width: 0; }
 .zone-form { display: flex; flex-direction: column; gap: 8px; }
 .zone-form label { display: flex; flex-direction: column; gap: 3px; }
 .zone-help { line-height: 1.5; }
+.lib-more { justify-content: center; margin-top: 12px; }
+
+/* ---------- Player detail (match Players tab) ---------- */
+.ps-panel { margin-top: 14px; padding: 12px 14px; background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; }
+.ps-panel h3 { margin: 0; }
+.ps-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); gap: 10px; margin: 10px 0; }
+.ps-value { font: 700 22px var(--head); }
+.page.match-page { padding: 12px 28px 16px; }
+
+/* ---------- Maps tab: filters beside the radar ---------- */
+.maps-layout { display: flex; gap: 16px; align-items: flex-start; }
+.maps-controls { width: 460px; flex: none; display: flex; flex-direction: column; gap: 8px; }
+.maps-controls .filters { margin: 0; flex-wrap: wrap; }
+.maps-stage { flex: 1; min-width: 0; }
+@media (max-width: 1100px) {
+  .maps-layout { flex-direction: column; }
+  .maps-controls { width: 100%; }
+}
+.match-page .insights { grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr)); gap: 8px; margin: 6px 0; }
+.match-page .insight { padding: 9px 11px; }
+.match-page h2 { margin: 10px 0 6px; }
+.insights-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(460px, 100%), 1fr)); gap: 16px; }
+.insights-pair h3 { margin: 4px 0; }

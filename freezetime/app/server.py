@@ -44,6 +44,7 @@ from freezetime.extract import add_replay, extract
 from freezetime.highlights import add_custom, delete_custom, highlights, kill_clips, load_custom
 from freezetime.lineups import MAP_RE, PRACTICE, cfg_name, lineup_cfg, lineup_commands, list_cfg, safe_text, throws
 from freezetime.maps import ZoneError, available_maps, load_map_config, save_zones
+from freezetime.player_stats import player_stats
 from freezetime.replay import round_payload
 from freezetime.scout import MatchData, dossier, match_data, playbook as discovered_playbook, roster_suggestions, select_rounds, similar_rounds, strategy_stats
 from freezetime.tactics import tactics, userid_map, utility_events
@@ -206,6 +207,11 @@ def _overview(d: Path, _stamp: float) -> dict:
         "team_stats": tables(ts),
         "players": rows(players),
     }
+
+
+@lru_cache(maxsize=16)
+def _player_stats(d: Path, _stamp: float) -> dict:
+    return player_stats(d)
 
 
 @lru_cache(maxsize=64)
@@ -660,7 +666,7 @@ def create_app(out: str | Path = "out") -> FastAPI:
             raise HTTPException(409, "the match is being processed; wait for the job to finish")
         source = lib.demo_for(d) if demo else None
         shutil.rmtree(d)
-        for cached in (_overview, _tactics, _points, _highlights, _frames, _coarse_frames, _movement, _match_data, _report):
+        for cached in (_overview, _tactics, _points, _highlights, _frames, _coarse_frames, _movement, _match_data, _report, _player_stats):
             cached.cache_clear()
         deleted_demo = None
         if source is not None and lib.owns_demo(source):
@@ -695,6 +701,12 @@ def create_app(out: str | Path = "out") -> FastAPI:
     def match(match_id: str) -> dict:
         d = lib.match_dir(match_id)
         return _overview(d, _stamp(d))
+
+    @api.get("/api/matches/{match_id}/player-stats")
+    def match_player_stats(match_id: str) -> dict:
+        """Per player: kills by weapon, accuracy (shots and hits) and flashes (freezetime/player_stats.py)."""
+        d = lib.match_dir(match_id)
+        return _player_stats(d, _stamp(d))
 
     @api.get("/api/matches/{match_id}/tactics")
     def match_tactics(match_id: str) -> dict:

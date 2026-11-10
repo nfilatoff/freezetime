@@ -16,6 +16,7 @@ interface Upload {
   error?: string;
 }
 
+const PAGE = 10; // matches shown at first and added per click
 const mapLabel = (map: string | null | undefined) => (map ? map.replace(/^de_/, "") : "?");
 
 export function LibraryPage() {
@@ -30,6 +31,7 @@ export function LibraryPage() {
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<LibraryMatch | null>(null);
+  const [shown, setShown] = useState(PAGE); // the newest matches first, more on request
   const fileInput = useRef<HTMLInputElement>(null);
   const uploading = useRef(false);
   const queue = useRef<File[]>([]);
@@ -122,7 +124,8 @@ export function LibraryPage() {
   const matches = (lib?.matches ?? []).filter(
     (m) => (!mapFilter || m.map === mapFilter) && (!teamFilter || teamFilter in (m.score ?? {})) &&
       (!q || m.id.toLowerCase().includes(q) || Object.keys(m.score ?? {}).some((t) => t.toLowerCase().includes(q))),
-  );
+  ).sort((a, b) => b.modified - a.modified || a.id.localeCompare(b.id));
+  useEffect(() => setShown(PAGE), [mapFilter, teamFilter, search]);
   const demos = (lib?.demos ?? []).filter(
     (d) => (!mapFilter || d.map === mapFilter) && (!hideExtracted || !d.extracted || jobFor(d.path)) && (!q || d.name.toLowerCase().includes(q)),
   );
@@ -174,7 +177,7 @@ export function LibraryPage() {
         <h2>{t("lib.matches")} <span className="count">{matches.length}{matches.length !== lib.matches.length ? t("lib.ofTotal", { n: lib.matches.length }) : ""}</span></h2>
         <div className="muted small">{t("lib.outDir", { dir: lib.out })}</div>
         <div className="cards">
-          {matches.map((m) => {
+          {matches.slice(0, shown).map((m) => {
             const job = jobs.find((j) => j.match_id === m.id && j.kind === "replay" && j.status !== "done");
             const teamsOf = Object.entries(m.score ?? {});
             const top = Math.max(...teamsOf.map(([, s]) => s));
@@ -229,6 +232,12 @@ export function LibraryPage() {
           })}
           {matches.length === 0 && <div className="muted">{t("lib.noMatches")}</div>}
         </div>
+        {matches.length > shown && (
+          <div className="row lib-more">
+            <button onClick={() => setShown((n) => n + PAGE)}>{t("lib.showMore", { n: Math.min(PAGE, matches.length - shown) })}</button>
+            <span className="muted small">{t("lib.shownOf", { n: shown, total: matches.length })}</span>
+          </div>
+        )}
       </section>
 
       <section>
