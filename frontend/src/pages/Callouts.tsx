@@ -5,7 +5,9 @@ import { drawCallouts, type CalloutMode } from "../callouts";
 import { CalloutModeSwitch } from "../components/CalloutToggle";
 import { mapPretty } from "../components/MatchPicker";
 import { t, td } from "../i18n";
-import { drawRadar, levelLabel, useMapAssets, type MapAssets } from "../radar";
+import { drawRadar, levelLabel, replaceMapMeta, useMapAssets, type MapAssets } from "../radar";
+import { ZoneEditor } from "../components/ZoneEditor";
+import type { MapMeta } from "../api";
 
 // the order of the list: from the sites outwards
 const GROUPS = ["A", "A_approach", "B", "B_approach", "mid", "t_spawn", "ct_spawn"];
@@ -40,7 +42,10 @@ export function CalloutsPage({ map }: { map?: string }) {
   }, []);
   const active = map ?? maps[0];
   const { assets, error: mapError } = useMapAssets(active);
-  const ready = assets && assets.meta.map === active ? assets : null;
+  const [edited, setEdited] = useState<MapMeta | null>(null); // zones saved by the editor on this visit
+  const [editing, setEditing] = useState(false);
+  const loaded = assets && assets.meta.map === active ? assets : null;
+  const ready = loaded && edited?.map === active ? { ...loaded, meta: edited } : loaded;
   const ref = useRef<HTMLCanvasElement>(null);
   const n = ready?.meta.levels.length ?? 1;
   const size = Math.min(n > 1 ? 640 : 860, Math.floor((window.innerWidth - (n > 1 ? 140 : 420)) / n));
@@ -64,11 +69,20 @@ export function CalloutsPage({ map }: { map?: string }) {
       {(error || mapError) && <div className="error">{error ?? mapError}</div>}
       <div className="filters">
         <span className="seg wrap">
-          {maps.map((m) => <button key={m} className={m === active ? "on" : ""} onClick={() => go("callouts", m)}>{mapPretty(m)}</button>)}
+          {maps.map((m) => <button key={m} className={m === active ? "on" : ""} disabled={editing && m !== active} onClick={() => go("callouts", m)}>{mapPretty(m)}</button>)}
         </span>
         <CalloutModeSwitch mode={mode} onChange={setMode} />
+        <span className="grow" />
+        {ready && !editing && <button onClick={() => setEditing(true)} title={t("zed.editTitle")}>✎ {t("zed.edit")}</button>}
       </div>
-      {!ready ? <div>{t("common.loading")}</div> : (
+      {!ready ? <div>{t("common.loading")}</div> : editing ? (
+        <ZoneEditor key={ready.meta.map} assets={ready} size={Math.max(420, Math.min(860, window.innerWidth - 560, window.innerHeight - 250))}
+          onSaved={(meta) => {
+            replaceMapMeta(meta);
+            setEdited(meta);
+          }}
+          onClose={() => setEditing(false)} />
+      ) : (
         <div className="callouts">
           <canvas ref={ref} width={size * n * dpr} height={size * dpr} style={{ width: size * n, height: size }} />
           <div className="callout-list">

@@ -48,6 +48,11 @@ export interface MapAssets {
 
 const metaCache = new Map<string, Promise<MapMeta>>();
 
+/** After the zone editor saved a map: every page drawing it from now on gets the new zones. */
+export function replaceMapMeta(meta: MapMeta) {
+  metaCache.set(meta.map, Promise.resolve(meta));
+}
+
 /** Map metadata plus one radar image per level (null where the image is not cached locally). */
 export async function loadMapAssets(map: string): Promise<MapAssets> {
   let p = metaCache.get(map);

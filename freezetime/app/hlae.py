@@ -279,7 +279,9 @@ def mux_take(ffmpeg: str, take: Path, out: Path) -> bool:
     if not videos or videos[0].stat().st_size == 0:
         return False
     sounds = sorted(take.rglob("audio.wav"))
-    sound = ["-i", str(sounds[0]), "-c:a", "aac", "-b:a", "192k", "-shortest"] if sounds else []
+    # the picture sets the length: a sound track that stops early is padded with silence instead of
+    # cutting the end of the take off (-shortest alone would end the clip with the sound)
+    sound = ["-i", str(sounds[0]), "-af", "apad", "-c:a", "aac", "-b:a", "192k", "-shortest"] if sounds else []
     subprocess.run(
         [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(videos[0]), *sound, "-c:v", "copy", "-movflags", "+faststart", str(out)],
         check=True, creationflags=NO_WINDOW, timeout=300,

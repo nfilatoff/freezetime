@@ -91,3 +91,56 @@ def test_geometry_helpers():
     assert len(hull) == 4
     line = np.array([[0, 0], [1, 0.01], [2, 0], [3, 5]])
     assert len(_simplify(line, 0.1)) == 3
+
+
+@pytest.fixture
+def config_copy(tmp_path, monkeypatch):
+    """The map configs copied to a temporary folder: saving zones never touches the real ones."""
+    import shutil
+
+    import freezetime.maps as maps
+
+    for p in maps.CONFIG_DIR.glob("*.json"):
+        shutil.copy(p, tmp_path / p.name)
+    monkeypatch.setattr(maps, "CONFIG_DIR", tmp_path)
+    load_map_config.cache_clear()
+    yield tmp_path
+    load_map_config.cache_clear()
+
+
+def test_saving_zones_keeps_sites_and_places(config_copy):
+    import json
+
+    from freezetime.maps import save_zones
+
+    before = json.loads((config_copy / "de_mirage.json").read_text(encoding="utf-8"))
+    zones = [{k: z[k] for k in ("name", "group", "level", "polygon")} for z in before["zones"]]
+    zones[0]["polygon"] = [[-3000, -3000], [-2900, -3000], [-2900, -2900.4], [-3000, -2900]]
+    zones.append({"name": "  New   spot ", "group": "mid", "level": "default", "polygon": [[3000, 3000], [3100, 3000], [3100, 3100]]})
+    cfg = save_zones("de_mirage", zones)
+    after = json.loads((config_copy / "de_mirage.json").read_text(encoding="utf-8"))
+    assert after["sites"] == before["sites"] and after["levels"] == before["levels"]
+    assert after["zones"][0]["place"] == before["zones"][0]["place"]  # a later `maps derive` still knows it
+    assert after["zones"][0]["polygon"][2] == [-2900, -2900]
+    assert after["zones"][-1]["name"] == "New spot" and "place" not in after["zones"][-1]
+    assert "edited in the app" in after["source"]
+    assert cfg.zone_of([-2950, 3050], [-2950, 3030]) == [before["zones"][0]["name"], "New spot"]
+
+
+@pytest.mark.parametrize("zone, why", [
+    ({"name": "", "level": "default", "polygon": [[0, 0], [1, 0], [0, 1]]}, "name"),
+    ({"name": "x", "group": "C", "level": "default", "polygon": [[0, 0], [1, 0], [0, 1]]}, "group"),
+    ({"name": "x", "level": "upper", "polygon": [[0, 0], [1, 0], [0, 1]]}, "level"),
+    ({"name": "x", "level": "default", "polygon": [[0, 0], [1, 0]]}, "3-"),
+    ({"name": "x", "level": "default", "polygon": [[0, 0], [1, 0], [0, "1"]]}, "two numbers"),
+    ({"name": "x", "level": "default", "polygon": [[0, 0], [1, 0], [0, float("nan")]]}, "two numbers"),
+    ({"name": "x", "level": "default", "polygon": [[0, 0], [5, 0], [10, 0]]}, "no area"),
+])
+def test_bad_zones_are_refused(config_copy, zone, why):
+    from freezetime.maps import ZoneError, check_zones, save_zones
+
+    with pytest.raises(ZoneError, match=why):
+        save_zones("de_mirage", [zone])
+    with pytest.raises(ZoneError, match="no config"):
+        check_zones("../de_mirage", [])
+    assert "edited in the app" not in (config_copy / "de_mirage.json").read_text(encoding="utf-8")

@@ -35,7 +35,7 @@ from freezetime.notes import NoteError, add_note, delete_note, load_notes, updat
 from freezetime.playlists import PlaylistError, add_item, create_playlist, delete_playlist, get_playlist, load_playlists, update_playlist
 from freezetime import playbook as playbook_mod
 from freezetime.app.archives import is_archive, unpack
-from freezetime.app.cs2 import BIND_COMMAND, SETTLE, CS2Bridge, NoConsole, game_running, steam_account
+from freezetime.app.cs2 import SETTLE, CS2Bridge, NoConsole, game_running, steam_account
 from freezetime.app import hlae
 from freezetime.app.recorder import Clip, Recorder, find_ffmpeg, load_index, pick_encoder, save_index
 from freezetime.app.jobs import JobQueue
@@ -43,7 +43,7 @@ from freezetime.context import alive_counts, load_match, round_context, with_man
 from freezetime.extract import add_replay, extract
 from freezetime.highlights import add_custom, delete_custom, highlights, kill_clips, load_custom
 from freezetime.lineups import MAP_RE, PRACTICE, cfg_name, lineup_cfg, lineup_commands, list_cfg, safe_text, throws
-from freezetime.maps import available_maps, load_map_config
+from freezetime.maps import ZoneError, available_maps, load_map_config, save_zones
 from freezetime.replay import round_payload
 from freezetime.scout import MatchData, dossier, match_data, playbook as discovered_playbook, roster_suggestions, select_rounds, similar_rounds, strategy_stats
 from freezetime.tactics import tactics, userid_map, utility_events
@@ -714,24 +714,26 @@ def create_app(out: str | Path = "out") -> FastAPI:
         d = lib.match_dir(match_id)
         return kill_clips(d, steamid, merge_sec=gap) if gap else kill_clips(d, steamid)
 
-    # ---- automatic recording: CS2 plays, ffmpeg records ----
+    # ---- automatic recording: HLAE starts CS2, the game renders every take ----
     @api.get("/api/recorder")
     def recorder_status() -> dict:
         ffmpeg = find_ffmpeg()
         return {
             "state": recorder.state, "ffmpeg": ffmpeg, "encoder": pick_encoder(ffmpeg) if ffmpeg else None,
-            "connected": cs2.connected(), "running": game_running(), "bind_command": BIND_COMMAND, "me": steam_account(),
+            "running": game_running(), "me": steam_account(),
             "hlae": str(hlae.find_hlae()) if hlae.find_hlae() else None,
         }
 
     @api.post("/api/recorder/start")
     def recorder_start(
-        match_id: str = Body(...), clips: list[dict] = Body(...), capture: str = Body("screen"), fps: int = Body(60),
+        match_id: str = Body(...), clips: list[dict] = Body(...), capture: str = Body("hlae"), fps: int = Body(60),
         clean: bool = Body(True), close_game: bool = Body(False), cut_gap: float | None = Body(None),
     ) -> dict:
         d = lib.match_dir(match_id)
-        if capture not in ("screen", "window", "hlae") or fps not in (30, 60) or not 1 <= len(clips) <= 200:
-            raise HTTPException(400, "capture: screen | window | hlae, fps: 30 | 60, 1-200 clips")
+        if capture != "hlae":  # screen and window capture were removed: say so rather than record another way
+            raise HTTPException(400, "rec_capture_removed")
+        if fps not in (30, 60) or not 1 <= len(clips) <= 200:
+            raise HTTPException(400, "fps: 30 | 60, 1-200 clips")
         if cut_gap is not None and not 1 <= cut_gap <= 60:
             raise HTTPException(400, "cut_gap: 1-60 s")
         rounds = pl.read_parquet(d / "rounds.parquet", columns=["round_num", "freeze_end_tick", "is_knife_round"]).filter(~pl.col("is_knife_round"))
@@ -750,27 +752,22 @@ def create_app(out: str | Path = "out") -> FastAPI:
                 title=str(c.get("title") or "clip")[:80], kind=str(c.get("kind") or "clip")[:20], steamid=sid, rate=rate,
                 kill_secs=[float(k) for k in c.get("kill_secs") or []], cut_gap=cut_gap,
             ))
-        if capture == "hlae":
-            exe, game = hlae.find_hlae(), cs2.game_dir()
-            if exe is None:
-                raise HTTPException(409, "cs2_hlae_missing")
-            if game is None:
-                raise HTTPException(409, "cs2_not_front")
-            if not hlae.steam_running():
-                raise HTTPException(409, "cs2_no_steam")
-            if recorder.running():
-                raise HTTPException(409, "a recording is already running")
-            if game_running():
-                if not close_game:  # the player's own game: closing it is their call
-                    raise HTTPException(409, "cs2_running")
-                hlae.close_game()
-                time.sleep(2)
-            try:
-                return recorder.start_hlae(match_id, d / "recordings", playable(match_id), game, exe, todo, fps, clean)
-            except RuntimeError as e:
-                raise HTTPException(409, str(e)) from e
+        exe, game = hlae.find_hlae(), cs2.game_dir()
+        if exe is None:
+            raise HTTPException(409, "cs2_hlae_missing")
+        if game is None:
+            raise HTTPException(409, "cs2_not_front")
+        if not hlae.steam_running():
+            raise HTTPException(409, "cs2_no_steam")
+        if recorder.running():
+            raise HTTPException(409, "a recording is already running")
+        if game_running():
+            if not close_game:  # the player's own game: closing it is their call
+                raise HTTPException(409, "cs2_running")
+            hlae.close_game()
+            time.sleep(2)
         try:
-            return recorder.start(match_id, d / "recordings", playable(match_id), todo, capture, fps, clean)
+            return recorder.start(match_id, d / "recordings", playable(match_id), game, exe, todo, fps, clean)
         except RuntimeError as e:
             raise HTTPException(409, str(e)) from e
 
@@ -1182,6 +1179,20 @@ def create_app(out: str | Path = "out") -> FastAPI:
 
     @api.get("/api/maps/{map_name}")
     def map_meta(map_name: str) -> dict:
+        return _map_meta(map_name)
+
+    @api.put("/api/maps/{map_name}/zones")
+    def map_zones_save(map_name: str, zones: list = Body(..., embed=True)) -> dict:
+        """The zone editor on the positions page: writes ``freezetime/maps/<map>.json`` (sites stay)."""
+        if map_name not in available_maps():
+            raise HTTPException(404, f"no config for {map_name}")
+        try:
+            save_zones(map_name, zones)
+        except ZoneError as e:
+            raise HTTPException(400, str(e)) from e
+        # everything computed with the old zones: tactics, reports, captions
+        for cached in (_overview, _tactics, _points, _highlights, _frames, _coarse_frames, _movement, _match_data, _report):
+            cached.cache_clear()
         return _map_meta(map_name)
 
     @api.get("/api/radar/{name}.png")

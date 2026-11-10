@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "./api";
+import { api, ownWithMatches } from "./api";
 import { hashParts } from "./router";
 import { LibraryPage } from "./pages/Library";
 import { MatchPage } from "./pages/Match";
@@ -32,7 +32,7 @@ export function App() {
   useEffect(() => detectSystemLang(() => api.system().then((s) => s.locale)), []);
   const [own, setOwn] = useState<string | null>(null);
   useEffect(() => {
-    api.teams().then((d) => setOwn(d.own)).catch(() => {});
+    api.teams().then((d) => setOwn(ownWithMatches(d))).catch(() => {});
   }, []);
   const us = own ? `scout/${encodeURIComponent(own)}` : null;
   const nav: [string, Key, typeof IconLibrary][] = [

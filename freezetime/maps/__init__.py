@@ -189,6 +189,77 @@ def available_maps() -> list[str]:
     return sorted(p.stem for p in CONFIG_DIR.glob("*.json"))
 
 
+MAX_ZONES = 600
+MAX_POINTS = 400
+NAME_LEN = 40
+COORD_MAX = 100_000.0
+
+
+class ZoneError(ValueError):
+    """Zones that can't be saved: the message says why."""
+
+
+def check_zones(map_name: str, zones: list) -> list[dict]:
+    """Zones from the editor, cleaned: name, group, level and a polygon of 3+ finite points.
+
+    Raises ``ZoneError`` for anything else, so a bad request never reaches the config file."""
+    cfg = load_map_config(map_name) if map_name in available_maps() else None  # a known name, never a path
+    if cfg is None:
+        raise ZoneError(f"no config for {map_name}")
+    levels = {lv.name for lv in cfg.levels}
+    if not isinstance(zones, list) or len(zones) > MAX_ZONES:
+        raise ZoneError(f"zones must be a list of at most {MAX_ZONES}")
+    out = []
+    for i, z in enumerate(zones):
+        if not isinstance(z, dict):
+            raise ZoneError(f"zone {i + 1} is not an object")
+        name = " ".join(str(z.get("name") or "").split())
+        if not name or len(name) > NAME_LEN:
+            raise ZoneError(f"zone {i + 1}: a name of 1-{NAME_LEN} characters is needed")
+        group = z.get("group") or None
+        if group is not None and group not in GROUPS:
+            raise ZoneError(f"{name}: unknown group {group!r}")
+        level = z.get("level") or "default"
+        if level not in levels:
+            raise ZoneError(f"{name}: unknown level {level!r}")
+        poly = z.get("polygon")
+        if not isinstance(poly, list) or not 3 <= len(poly) <= MAX_POINTS:
+            raise ZoneError(f"{name}: a polygon needs 3-{MAX_POINTS} points")
+        points = []
+        for p in poly:
+            if not (isinstance(p, list | tuple) and len(p) == 2
+                    and all(isinstance(v, int | float) and not isinstance(v, bool) and np.isfinite(v) and abs(v) < COORD_MAX for v in p)):
+                raise ZoneError(f"{name}: a point must be two numbers")
+            points.append([round(float(p[0])), round(float(p[1]))])
+        if Area(name, group, level, np.asarray(points, dtype=float)).area < 1:
+            raise ZoneError(f"{name}: the polygon has no area")
+        out.append({"name": name, "group": group, "level": level, "polygon": points})
+    return out
+
+
+def save_zones(map_name: str, zones: list) -> MapConfig:
+    """Replace the map's zones (callouts) in ``<map>.json``; sites, levels and the rest stay as they are.
+
+    A zone keeps the nav ``place`` it was derived from while its name stays the same, so a later
+    ``maps derive`` still finds its group."""
+    clean = check_zones(map_name, zones)
+    path = CONFIG_DIR / f"{map_name}.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    places = {z["name"]: z["place"] for z in raw.get("zones", []) if z.get("place")}
+    raw["zones"] = [{"name": z["name"], **({"place": places[z["name"]]} if z["name"] in places else {}),
+                     "group": z["group"], "level": z["level"], "polygon": z["polygon"]} for z in clean]
+    raw.setdefault("sites", [])
+    raw.setdefault("levels", [{"name": lv.name, "z_min": lv.z_min, "z_max": lv.z_max, "radar": lv.radar} for lv in load_map_config(map_name).levels])
+    raw.setdefault("source", "")
+    if "edited in the app" not in raw["source"]:
+        raw["source"] = (raw["source"] + "; zones edited in the app").lstrip("; ")
+    from freezetime.mapgen import write_config  # noqa: PLC0415 (mapgen needs this module)
+
+    write_config(raw, path)
+    load_map_config.cache_clear()
+    return load_map_config(map_name)
+
+
 @cache
 def load_map_config(map_name: str) -> MapConfig | None:
     """The map's config, or ``None`` when the map has no config file."""

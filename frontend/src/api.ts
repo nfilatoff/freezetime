@@ -116,6 +116,9 @@ export interface Teams {
   own: string | null;
 }
 
+/** "Our team" only while the library still has its matches: a saved name of a team whose demos are gone shows no "Us" page. */
+export const ownWithMatches = (d: Teams): string | null => (d.own && d.teams.some((x) => x.name === d.own) ? d.own : null);
+
 type Merged = { added: number; updated: number; skipped: number };
 export interface PackResult {
   boards: Merged;
@@ -361,15 +364,13 @@ export interface RecorderStatus {
     match_id?: string;
     i: number;
     n: number;
-    phase?: "connect" | "launch" | "loading" | "seek" | "record" | "finish" | "done" | "cancelled";
+    phase?: "launch" | "loading" | "seek" | "record" | "finish" | "done" | "cancelled";
     files: string[];
     error: string | null;
   };
   ffmpeg: string | null;
   encoder: string | null;
-  connected: boolean;
-  running: boolean;
-  bind_command: string;
+  running: boolean; // CS2 is open: HLAE has to close it first
   hlae: string | null;
   me: { steamid: string; name: string } | null;
 }
@@ -685,8 +686,8 @@ export const api = {
     request<Highlight[]>(`${m(id)}/kills?steamid=${encodeURIComponent(steamid)}${gap ? `&gap=${gap}` : ""}`),
   recorder: () => request<RecorderStatus>("/api/recorder"),
   recorderStart: (match_id: string, clips: { round: number; start: number; end: number; steamid: string | null; title: string; kind: string; kill_secs?: number[] }[],
-    capture: "screen" | "window" | "hlae", fps: number, clean: boolean, close_game = false, cut_gap: number | null = null) =>
-    request<{ steam_url: string | null }>("/api/recorder/start", json({ match_id, clips, capture, fps, clean, close_game, cut_gap })),
+    fps: number, clean: boolean, close_game = false, cut_gap: number | null = null) =>
+    request<{ steam_url: string | null }>("/api/recorder/start", json({ match_id, clips, capture: "hlae", fps, clean, close_game, cut_gap })),
   hlaeInstall: () => request<{ version: string; path: string; sha256: string }>("/api/hlae/install", { method: "POST" }),
   recorderCancel: () => request<RecorderStatus["state"]>("/api/recorder/cancel", { method: "POST" }),
   recordings: (id: string) => request<Recording[]>(`${m(id)}/recordings`),
@@ -699,6 +700,8 @@ export const api = {
   deleteBoard: (id: string) => request<{ deleted: string }>(`/api/boards/${encodeURIComponent(id)}`, { method: "DELETE" }),
   maps: () => request<string[]>("/api/maps"),
   mapMeta: (map: string) => request<MapMeta>(`/api/maps/${map}`),
+  mapZones: (map: string, zones: MapMeta["zones"]) =>
+    request<MapMeta>(`/api/maps/${map}/zones`, { ...json({ zones }), method: "PUT" }),
   aggregate: (ids: string[], aliases: Record<string, string>) =>
     request<{ tables: Tables; warnings: string[] }>("/api/aggregate", json({ ids, aliases })),
 };

@@ -2,7 +2,7 @@ import shutil
 
 import pytest
 
-from freezetime.highlights import add_custom, delete_custom, highlights, load_custom
+from freezetime.highlights import CLUTCH_TAIL_SEC, TAIL_SEC, add_custom, delete_custom, highlights, load_custom
 
 
 def test_auto_highlights(dust2_mini):
@@ -17,8 +17,13 @@ def test_auto_highlights(dust2_mini):
     assert len({h["id"] for h in hs}) == len(hs)
     for h in hs:
         assert h["end"] - h["start"] <= 60
+        if h["kill_secs"] and not h["clutch"]:  # the take goes on after the last kill instead of ending on it
+            assert abs(h["end"] - (h["kill_secs"][-1] + TAIL_SEC)) < 0.02
+        elif h["kill_secs"]:
+            assert h["end"] >= h["kill_secs"][-1] + min(TAIL_SEC, CLUTCH_TAIL_SEC) - 0.02
         if h["kind"] == "special":
             assert h["tags"]
+    assert TAIL_SEC >= 3.0
 
 
 def test_custom_highlights(dust2_mini, tmp_path):

@@ -1,8 +1,7 @@
-// Automatic recording, like a clip service but on your own PC: the open CS2 plays the demo from the
-// player's eyes and the backend records the screen with ffmpeg, clip by clip (freezetime/app/recorder.py).
+// Automatic recording, like a clip service but on your own PC: HLAE starts CS2, the game plays the demo
+// from the player's eyes and renders every clip with sound on its exact ticks (freezetime/app/recorder.py, hlae.py).
 import { useEffect, useRef, useState } from "react";
 import { api, cs2Error, recordingUrl, type Highlight, type MatchOverview, type Recording, type RecorderStatus } from "../api";
-import { ConsoleSetup } from "./ConsoleSetup";
 import { hlTitle } from "../highlightRender";
 import { t, td } from "../i18n";
 
@@ -12,7 +11,6 @@ export function RecordPanel({ match, checked, onFinished }: { match: MatchOvervi
   const [status, setStatus] = useState<RecorderStatus | null>(null);
   const [source, setSource] = useState<Source>(checked.length ? "checked" : "kills");
   const [player, setPlayer] = useState("");
-  const [capture, setCapture] = useState<"screen" | "window" | "hlae">("screen");
   const [installing, setInstalling] = useState(false);
   const [cut, setCut] = useState(true);
   const [gap, setGap] = useState(3);
@@ -69,9 +67,9 @@ export function RecordPanel({ match, checked, onFinished }: { match: MatchOvervi
       }));
       if (!clips.length) throw new Error(t("rec.nothing"));
       // HLAE starts its own game: an open one has to close first, and that is the player's call
-      const closeGame = capture === "hlae" && !!status?.running;
+      const closeGame = !!status?.running;
       if (closeGame && !window.confirm(t("rec.hlae.closeConfirm"))) return;
-      await api.recorderStart(match.id, clips, capture, fps, clean, closeGame, cutGap);
+      await api.recorderStart(match.id, clips, fps, clean, closeGame, cutGap);
       setStatus(await api.recorder());
     } catch (e) {
       setError((e as Error).message);
@@ -94,18 +92,14 @@ export function RecordPanel({ match, checked, onFinished }: { match: MatchOvervi
     }
   };
 
-  const hlaeMode = capture === "hlae";
   const meHere = status?.me && players.some((p) => p.steamid === status.me!.steamid);
   return (
     <div className="rec-panel">
       <h3>{t("rec.title")}</h3>
       {status && !status.ffmpeg && <div className="warn small">{t("rec.noFfmpeg")}</div>}
-      {status && !status.connected && !hlaeMode && (
-        <ConsoleSetup bindCommand={status.bind_command} running={status.running} onLinked={() => api.recorder().then(setStatus)} />
-      )}
       {status && (
         <div className="muted small">
-          CS2: {status.connected ? <span className="ok-text">{t("rec.cs2On")}</span> : t("rec.cs2Off")}
+          HLAE: {status.hlae ? <span className="ok-text">{t("rec.hlae.ready")}</span> : t("rec.hlae.missing")}
           {status.encoder ? ` · ${t("rec.encoder", { enc: status.encoder })}` : ""}
           {status.me ? ` · ${t("rec.account", { name: status.me.name })}` : ""}
         </div>
@@ -128,12 +122,6 @@ export function RecordPanel({ match, checked, onFinished }: { match: MatchOvervi
         )}
       </div>
       <div className="row small">
-        {t("rec.capture")}
-        <span className="seg">
-          <button className={capture === "screen" ? "on" : ""} onClick={() => setCapture("screen")}>{t("rec.screen")}</button>
-          <button className={capture === "window" ? "on" : ""} onClick={() => setCapture("window")}>{t("rec.window")}</button>
-          <button className={hlaeMode ? "on" : ""} onClick={() => setCapture("hlae")}>{t("rec.hlae.mode")}</button>
-        </span>
         <span className="seg">
           {[30, 60].map((v) => <button key={v} className={fps === v ? "on" : ""} onClick={() => setFps(v)}>{t("clip.fps", { n: v })}</button>)}
         </span>
@@ -144,28 +132,26 @@ export function RecordPanel({ match, checked, onFinished }: { match: MatchOvervi
         <input type="number" min={1} max={60} value={gap} disabled={!cut} style={{ width: 56 }} onChange={(e) => setGap(Number(e.target.value))} /> {t("common.s")}
       </div>
       {cut && <div className="muted small">{t(source === "kills" ? "rec.cutKills" : "rec.cutChecked")}</div>}
-      {hlaeMode && (
-        <div className="link-setup small">
-          <div>{t("rec.hlae.about")}</div>
-          {status && !status.hlae && (
-            <div className="row">
-              <button disabled={installing} onClick={installHlae}>{installing ? t("rec.hlae.installing") : t("rec.hlae.install")}</button>
-              <span className="muted">{t("rec.hlae.source")}</span>
-            </div>
-          )}
-        </div>
-      )}
+      <div className="link-setup small">
+        <div>{t("rec.hlae.about")}</div>
+        {status && !status.hlae && (
+          <div className="row">
+            <button disabled={installing} onClick={installHlae}>{installing ? t("rec.hlae.installing") : t("rec.hlae.install")}</button>
+            <span className="muted">{t("rec.hlae.source")}</span>
+          </div>
+        )}
+      </div>
       <div className="row">
         {busy ? (
           <>
             <div className="progress grow">
               <div className="progress-bar" style={{ width: `${st && st.n ? ((st.i - 1 + (st.phase === "finish" ? 1 : 0.5)) / st.n) * 100 : 0}%` }} />
-              <span>{t("rec.progress", { i: st?.i || 1, n: st?.n ?? 0, phase: td(`rec.phase.${st?.phase ?? "connect"}`, "") })}</span>
+              <span>{t("rec.progress", { i: st?.i || 1, n: st?.n ?? 0, phase: td(`rec.phase.${st?.phase ?? "launch"}`, "") })}</span>
             </div>
             <button onClick={() => api.recorderCancel().then(() => api.recorder()).then(setStatus)}>{t("common.cancel")}</button>
           </>
         ) : (
-          <button className="primary" disabled={preparing || !status?.ffmpeg || (hlaeMode ? !status.hlae : !status.connected) || (source === "checked" ? !checked.length : !player)} onClick={start}>
+          <button className="primary" disabled={preparing || !status?.ffmpeg || !status.hlae || (source === "checked" ? !checked.length : !player)} onClick={start}>
             {preparing ? t("rec.cutting") : t("rec.start")}
           </button>
         )}
@@ -173,7 +159,6 @@ export function RecordPanel({ match, checked, onFinished }: { match: MatchOvervi
       {st?.status === "done" && st.match_id === match.id && <div className="small ok-text">{t("rec.done", { n: st.files.length })}</div>}
       {st?.status === "error" && st.match_id === match.id && <div className="small error">{t("rec.error", { error: cs2Error(st.error ?? "") })}</div>}
       {error && <div className="small error">{error}</div>}
-      {!hlaeMode && <div className="muted small">{t("rec.hint")}</div>}
     </div>
   );
 }

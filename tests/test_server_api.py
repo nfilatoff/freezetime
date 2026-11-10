@@ -156,3 +156,31 @@ def test_players_of_our_team(out):
     call(app, "POST", "/api/teams/own", body={"name": raw_team})
     players = call(app, "GET", "/api/teams/own/players")[1]["list"]
     assert len(players) == 5 and all(p["matches"] == 1 and p["nick"] for p in players)
+
+
+def test_only_hlae_records(out):
+    app = create_app(out)
+    clip = {"round": 2, "start": 1, "end": 4, "steamid": None, "title": "x", "kind": "custom"}
+    for capture in ("screen", "window"):  # removed modes are refused, never replaced by another way of recording
+        assert call(app, "POST", "/api/recorder/start", body={"match_id": "dust2_mini", "clips": [clip], "capture": capture}) == (400, {"detail": "rec_capture_removed"})
+    status = call(app, "GET", "/api/recorder")[1]
+    assert "connected" not in status and "bind_command" not in status and "hlae" in status
+
+
+def test_zone_editor_saves_a_map(out, tmp_path, monkeypatch):
+    import shutil
+
+    import freezetime.maps as maps
+
+    configs = tmp_path / "configs"
+    shutil.copytree(maps.CONFIG_DIR, configs, ignore=shutil.ignore_patterns("*.py", "__pycache__"))
+    monkeypatch.setattr(maps, "CONFIG_DIR", configs)
+    maps.load_map_config.cache_clear()
+    app = create_app(out)
+    zone = {"name": "Box", "group": "mid", "level": "default", "polygon": [[0, 0], [100, 0], [100, 100]]}
+    assert call(app, "PUT", "/api/maps/de_nope/zones", body={"zones": [zone]})[0] == 404
+    assert call(app, "PUT", "/api/maps/de_dust2/zones", body={"zones": [zone | {"group": "C"}]})[0] == 400
+    assert call(app, "PUT", "/api/maps/de_dust2/zones", body={"zones": [zone]}, client=REMOTE)[0] == 403
+    status, meta = call(app, "PUT", "/api/maps/de_dust2/zones", body={"zones": [zone]})
+    maps.load_map_config.cache_clear()
+    assert status == 200 and [z["name"] for z in meta["zones"]] == ["Box"] and meta["sites"]

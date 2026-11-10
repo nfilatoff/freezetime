@@ -6,7 +6,7 @@ import pytest
 
 from freezetime.app import hlae
 from freezetime.app import recorder as rec
-from freezetime.highlights import highlights, keep_ranges, kill_clips
+from freezetime.highlights import CUT_LEAD, CUT_TAIL, highlights, keep_ranges, kill_clips
 
 
 def test_close_kills_are_not_cut():
@@ -14,8 +14,9 @@ def test_close_kills_are_not_cut():
 
 
 def test_a_long_pause_is_cut_out():
-    # kills at 13 and 30: up to a second after the first, from 1.5 s before the second
-    assert keep_ranges(10, 32, [13, 30], 3) == [(0.0, 4.0), (18.5, 22.0)]
+    # kills at 13 and 30: up to CUT_TAIL after the first, from CUT_LEAD before the second
+    assert keep_ranges(10, 32, [13, 30], 3) == [(0.0, 3.0 + CUT_TAIL), (20.0 - CUT_LEAD, 22.0)]
+    assert (CUT_LEAD, CUT_TAIL) == (1.5, 1.5)
 
 
 def test_exactly_the_gap_is_not_a_pause():
@@ -102,4 +103,4 @@ def test_index_gets_the_cut_length(tmp_path):
     out = tmp_path / "x.mp4"
     out.write_bytes(b"v")
     rec.Recorder._index(tmp_path, c, out)
-    assert json.loads((tmp_path / "recordings.json").read_text(encoding="utf-8"))[0]["seconds"] == 10.5  # 4 s + 6.5 s of 30
+    assert json.loads((tmp_path / "recordings.json").read_text(encoding="utf-8"))[0]["seconds"] == 11.0  # 4.5 s + 6.5 s of 30

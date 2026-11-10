@@ -19,14 +19,14 @@ import polars as pl
 from freezetime.context import Match, load_match, with_round
 
 LEAD_SEC = 3.0  # clip starts this long before the first kill
-TAIL_SEC = 2.0  # and ends this long after the last one
-CLUTCH_TAIL_SEC = 4.0  # a clutch shows the end of the round (defuse, explosion), up to this long after the last kill
+TAIL_SEC = 3.0  # and ends this long after the last one: the fall and the kill feed line stay in view
+CLUTCH_TAIL_SEC = 5.0  # a clutch shows the end of the round (defuse, explosion), up to this long after the last kill
 MAX_SEC = 60.0
 QUICK_SEC = 3.0  # two kills this close make a quick double
 SNIPERS = {"awp", "ssg08", "g3sg1", "scar20"}
 BASE_SCORE = {"ace": 100, "4k": 75, "3k": 45, "clutch": 30, "double": 15, "special": 12}
 CUT_LEAD = 1.5  # after a cut pause: seconds shown before the next kill
-CUT_TAIL = 1.0  # before a cut pause: seconds shown after the kill
+CUT_TAIL = 1.5  # before a cut pause: seconds shown after the kill (1 s ended a take on the shot itself)
 CUT_LEAD_FIRST = LEAD_SEC  # seconds before the first kill, when the wait before it is cut
 NEIGHBOUR_GAP = 0.2  # seconds between two clips of a round: the game needs a moment between takes
 CUSTOM_FILE = "highlights.json"

@@ -48,7 +48,7 @@ def test_takes_go_to_an_absolute_path(tmp_path, monkeypatch):
     monkeypatch.setattr(rec, "user_cvars", lambda: {})
     settings = {}
     r = rec.Recorder(CS2Bridge(settings.get, settings.__setitem__))
-    r._run_hlae("ffmpeg", "libx264", Path("out/m/recordings"), "d", tmp_path, tmp_path / "H.exe", [clip(1000)], 60, True, 1, 1)
+    r._run("ffmpeg", "libx264", Path("out/m/recordings"), "d", tmp_path, tmp_path / "H.exe", [clip(1000)], 60, True, 1, 1)
     assert tmp_path.as_posix() in seen["setup"]
 
 
@@ -164,7 +164,7 @@ def test_session_end_to_end(tmp_path, monkeypatch):
     (tmp_path / "ffmpeg").mkdir()
     settings = {}
     r = rec.Recorder(CS2Bridge(settings.get, settings.__setitem__))
-    r.start_hlae("m", folder, "d", game, tmp_path / "HLAE.exe", [clip(1000, title="ace")], 60, True)
+    r.start("m", folder, "d", game, tmp_path / "HLAE.exe", [clip(1000, title="ace")], 60, True)
     _wait(lambda: r.state["status"] != "running", 30)
     assert r.state["status"] == "done", r.state["error"]
     [name] = r.state["files"]
@@ -184,3 +184,22 @@ def test_a_game_without_the_hook_is_reported(tmp_path):
     with pytest.raises(RuntimeError, match="cs2_hlae_no_hook"):
         hlae.run_session(tmp_path / "H.exe", game, "d", [clip(1000)], {"a": ["x"]}, 1, 1, lambda: states.pop(0) if states else False,
                          lambda _t: None, lambda: False, kill=lambda: None, popen=popen)
+
+
+def _duration(path) -> float:
+    probe = subprocess.run([ffmpeg, "-hide_banner", "-i", str(path)], capture_output=True, text=True).stderr
+    h, m, s = probe.split("Duration: ")[1].split(",")[0].split(":")
+    return int(h) * 3600 + int(m) * 60 + float(s)
+
+
+@needs_ffmpeg
+def test_a_short_sound_does_not_cut_the_end_of_a_take(tmp_path):
+    """The picture sets the length: a sound track that stops early is padded, not used to end the clip."""
+    take = tmp_path / "clip0" / "take0000"
+    take.mkdir(parents=True)
+    run = lambda *a: subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", *a], check=True)  # noqa: E731
+    run("-f", "lavfi", "-i", "testsrc2=s=320x240:r=30", "-t", "3", "-pix_fmt", "yuv420p", str(take / "video.mp4"))
+    run("-f", "lavfi", "-i", "sine=f=440", "-t", "1", str(take / "audio.wav"))
+    out = tmp_path / "out.mp4"
+    assert hlae.mux_take(ffmpeg, tmp_path / "clip0", out)
+    assert 2.9 <= _duration(out) <= 3.2

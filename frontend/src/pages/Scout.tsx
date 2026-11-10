@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type MovementFilter, type MultiroundPlayer, type RoundRef, type Row, type ScoutQuery, type ScoutReport, type ScoutTeam, type SimilarRound, type Strat, type Teams } from "../api";
+import { api, ownWithMatches, type MovementFilter, type MultiroundPlayer, type RoundRef, type Row, type ScoutQuery, type ScoutReport, type ScoutTeam, type SimilarRound, type Strat, type Teams } from "../api";
 import { go, hashQuery } from "../router";
 import { drawCallouts, useCalloutMode } from "../callouts";
 import { CalloutToggle } from "../components/CalloutToggle";
@@ -67,7 +67,7 @@ export function ScoutPage({ team, map, tab, onOwn }: { team?: string; map?: stri
   const [error, setError] = useState<string | null>(null);
   const reloadTeams = () => api.teams().then((d) => {
     setTeams(d);
-    onOwn(d.own);
+    onOwn(ownWithMatches(d));
   }).catch((e: Error) => setError(e.message));
   useEffect(() => {
     reloadTeams();

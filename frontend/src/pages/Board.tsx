@@ -37,6 +37,7 @@ const DEFAULT_KEYS: Record<Action, string> = {
   select: "v", pen: "p", arrow: "a", rect: "r", circle: "c", text: "t", eraser: "e", play: " ", onion: "o", prevStep: "q", nextStep: "w",
 };
 const KEYS_STORAGE = "freezetime.board.keys";
+const NARROW = "(max-width: 1100px)"; // same breakpoint as .board-layout in styles.css
 const WIP_STORAGE = "freezetime.board.wip";
 const AUTHOR_STORAGE = "freezetime.board.author";
 
@@ -112,7 +113,7 @@ export function BoardPage({ id }: { id?: string }) {
   const callouts = useCalloutMode();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
-  const [boxWidth, setBoxWidth] = useState(900);
+  const [box, setBox] = useState({ w: 900, h: 0 });
   const drag = useRef<Drag | null>(null);
   const animT = useRef(0);
   const abort = useRef<AbortController | null>(null);
@@ -198,14 +199,18 @@ export function BoardPage({ id }: { id?: string }) {
   useEffect(() => {
     const el = boxRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setBoxWidth(el.clientWidth));
+    // the stage takes what is left of the window under the head and above the tools (styles.css),
+    // so the map, the toolbar and the export buttons are all on screen without scrolling
+    const ro = new ResizeObserver(() => setBox({ w: el.clientWidth, h: el.clientHeight }));
     ro.observe(el);
     return () => ro.disconnect();
   }, [board === null]);
 
   const multi = (ready?.meta.levels.length ?? 1) > 1;
   const levels = ready ? panelLevels(ready.meta, multi ? view : 0) : [0];
-  const size = Math.max(360, Math.min(Math.floor(boxWidth / levels.length), window.innerHeight - 250));
+  // a narrow window stacks the board list under the board and the page scrolls: no height to fit into then
+  const fitHeight = !window.matchMedia(NARROW).matches && box.h > 0 ? box.h : window.innerHeight - 250;
+  const size = Math.max(240, Math.min(Math.floor(box.w / levels.length), fitHeight));
   const width_ = size * levels.length;
   const dpr = window.devicePixelRatio || 1;
 
@@ -807,7 +812,9 @@ export function BoardPage({ id }: { id?: string }) {
             <button className="danger" onClick={clearAll} title={t("board.clearAll")}>{t("board.clear")}</button>
           </div>
 
-          {sel && (
+          {!sel ? (
+            <div className="board-selection idle"><span className="muted small">{t("board.hint")}</span></div>
+          ) : (
             <div className="board-selection">
               {sel.tok?.type === "player" && (
                 <>
@@ -857,7 +864,6 @@ export function BoardPage({ id }: { id?: string }) {
           )}
 
           <div className="board-foot">
-            <span className="muted small">{t("board.hint")}</span>
             <span className="grow" />
             <button className="small-btn" onClick={() => setShowKeys((s) => !s)}>⌨ {t("board.hotkeys")}</button>
             <button className="small-btn" disabled={busy !== null} onClick={() => exportPng(false)}>{t("board.pngStep")}</button>
