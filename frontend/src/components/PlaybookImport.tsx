@@ -2,11 +2,9 @@ import { useEffect, useState } from "react";
 import { api, type LibraryMatch, type PlaybookBook, type ScoutReport, type Strat } from "../api";
 import { t } from "../i18n";
 import { nadeLabel } from "./InsightCards";
-import { useSession } from "../session";
 
 /** Keep the detector's site/core and its example rounds when adopting a found strategy. */
 export function AddToPlaybook({ strategy, map, team }: { strategy: Strat; map: string; team: string }) {
-  const session = useSession();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(t("scout.stratTitle", { id: strategy.id, site: strategy.site }));
   const [books, setBooks] = useState<PlaybookBook[]>([]);
@@ -18,14 +16,13 @@ export function AddToPlaybook({ strategy, map, team }: { strategy: Strat; map: s
   useEffect(() => {
     if (open) api.playbook().then((d) => setBooks(d.books)).catch((e: Error) => setError(e.message));
   }, [open]);
-  if (!session?.can_edit) return null;
   const save = async () => {
     setBusy(true); setError("");
     try {
       let entryId = saved;
       if (!entryId) {
         const entry = await api.savePlaybookEntry({
-          name, kind: "strategy", map, side: "terrorist", category: "", pinned: false, steps: [], tasks: {},
+          name, kind: "strategy", map, side: "terrorist", category: "", pinned: false, steps: [], tasks: [],
           description: t("pb.importDescription", { team, site: strategy.site, core: strategy.core.map((c) => `${nadeLabel(c.type)} ${c.zone}`).join(", ") || t("scout.noSmokes") }),
           attachments: strategy.examples.map((r) => ({ kind: "round", label: `${r.match} · ${t("pl.round", { round: r.round })}`, match: r.match, round: r.round, start: r.sec, end: null, caption: "" })),
           detector: { site: strategy.site, core: strategy.core.map(({ type, zone }) => ({ type, zone })) },

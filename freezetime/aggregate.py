@@ -211,3 +211,21 @@ def aggregate(directories: list[str | Path], aliases: dict[str, str] | None = No
         .sort("adr", descending=True)
     )
     return result
+
+
+def team_players(matches: list[dict], team: str, aliases: dict[str, str]) -> list[dict]:
+    """Players seen playing for ``team`` (after aliases), the most frequent first.
+
+    ``matches`` are ``{"teams": [raw names], "players": [{"steamid", "name", "team"}]}``, newest
+    first; a player's nick is the one from their latest match.
+    """
+    seen: dict[str, dict] = {}
+    for match in matches:
+        ours = {raw for raw in match["teams"] if aliases.get(raw, raw) == team}
+        for p in match["players"]:
+            sid = str(p.get("steamid") or "")
+            if p.get("team") not in ours or not sid:
+                continue
+            e = seen.setdefault(sid, {"steamid": sid, "nick": p.get("name") or sid, "matches": 0})
+            e["matches"] += 1
+    return sorted(seen.values(), key=lambda e: (-e["matches"], e["nick"].lower()))

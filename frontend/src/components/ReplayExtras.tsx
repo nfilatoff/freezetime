@@ -3,37 +3,29 @@ import { useEffect, useState } from "react";
 import { api, type Note, type Playlist } from "../api";
 import { fmtClock } from "../replayDraw";
 import { t } from "../i18n";
-import { useSession } from "../session";
 
-export const noteAuthor = (n: Note) => n.author_nick || t("notes.analyst");
 export const secLabel = (sec: number) => (sec < 0 ? `-${fmtClock(-sec)}` : fmtClock(sec));
 
-/** Notes of one round: a click jumps to the moment; the author or staff can delete. */
+/** Notes of one round: a click jumps to the moment. */
 export function RoundNotes({ notes, onSeek, onChanged }: { notes: Note[]; onSeek: (sec: number) => void; onChanged: () => void }) {
-  const session = useSession();
   if (!notes.length) return null;
-  const mine = (n: Note) => session?.can_edit || (!!session?.member && n.author === session.member.id);
   return (
     <div className="round-notes">
       {[...notes].sort((a, b) => a.sec - b.sec).map((n) => (
         <div key={n.id} className="round-note">
           <button className="link mono" onClick={() => onSeek(n.sec)} title={t("notes.jump")}>{secLabel(n.sec)}</button>
-          <b>{noteAuthor(n)}</b>
           <span className="round-note-text">{n.text}</span>
-          {mine(n) && (
-            <button className="link small" onClick={() => window.confirm(t("notes.deleteConfirm")) && api.deleteNote(n.id).then(onChanged).catch(() => {})}>
-              {t("common.deleteLower")}
-            </button>
-          )}
+          <button className="link small" onClick={() => window.confirm(t("notes.deleteConfirm")) && api.deleteNote(n.id).then(onChanged).catch(() => {})}>
+            {t("common.deleteLower")}
+          </button>
         </div>
       ))}
     </div>
   );
 }
 
-/** Write a note at the current second; @nick names a teammate from the roster. */
+/** Write a note at the current second. */
 export function NoteForm({ match, round, sec, onDone }: { match: string; round: number; sec: number; onDone: (saved: boolean) => void }) {
-  const session = useSession();
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const at = Math.round(sec * 10) / 10;
@@ -41,21 +33,15 @@ export function NoteForm({ match, round, sec, onDone }: { match: string; round: 
     if (!text.trim()) return;
     api.addNote({ match, round, sec: at, text }).then(() => onDone(true)).catch((e: Error) => setError(e.message));
   };
-  const nicks = session?.members.map((m) => m.nick) ?? [];
   return (
     <div className="replay-panel">
-      <div className="muted small">{t("notes.at", { round, time: secLabel(at) })}{session?.member ? ` · ${session.member.nick}` : ""}</div>
+      <div className="muted small">{t("notes.at", { round, time: secLabel(at) })}</div>
       <textarea autoFocus rows={2} maxLength={2000} value={text} placeholder={t("notes.placeholder")} onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) save();
           else if (e.key === "Escape") onDone(false);
           e.stopPropagation(); // the replay's hotkeys stay out of the text
         }} />
-      {nicks.length > 0 && (
-        <div className="note-nicks">
-          {nicks.map((nick) => <button key={nick} className="small-btn" onClick={() => setText((v) => `${v}${v && !v.endsWith(" ") ? " " : ""}@${nick} `)}>@{nick}</button>)}
-        </div>
-      )}
       <div className="row">
         <button className="primary" disabled={!text.trim()} onClick={save}>{t("common.save")}</button>
         <button onClick={() => onDone(false)}>{t("common.cancel")}</button>

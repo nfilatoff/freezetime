@@ -116,27 +116,13 @@ export interface Teams {
   own: string | null;
 }
 
-// ---- who is using the app (freezetime/app/access.py) ----
-export interface SessionMember { id: string; nick: string; role: string }
-export interface Session {
-  mode: "local" | "team";
-  local: boolean; // this is the computer the app runs on
-  role: "analyst" | "staff" | "player" | null;
-  can_edit: boolean;
-  need: "token" | "member" | "team_mode" | null; // what a visitor lacks to be let in
-  member: SessionMember | null;
-  team: string | null;
-  members: SessionMember[];
-  share?: { token: string; addresses: string[] }; // the team server's join links, on the analyst's computer only
-}
-
 type Merged = { added: number; updated: number; skipped: number };
 export interface PackResult {
   boards: Merged;
   notes?: Merged;
   playlists?: Merged;
   playbook?: Merged;
-  team: "added" | "kept" | null;
+  team: "skipped" | null; // an old pack with a team profile: not imported
   matches: { added: string[]; skipped: string[] };
 }
 
@@ -147,28 +133,22 @@ export interface Note {
   round: number;
   sec: number; // seconds after the freeze end
   text: string;
-  author: string; // roster member id; "" for the analyst's computer with nobody chosen
-  author_nick: string;
-  mentions: string[];
-  read_by: string[];
   created: number;
   updated: number;
 }
-export interface NoteList { notes: Note[]; unread: number; me: string | null }
+export interface NoteList { notes: Note[] }
 export interface PlaylistItem { id?: string; match: string; round: number; start: number | null; end: number | null; caption: string }
 export interface Playlist {
   id: string;
   name: string;
   folder: string;
-  owner: string;
-  owner_nick: string;
   items: (PlaylistItem & { id: string })[];
   created: number;
   updated: number;
 }
 export type PlaylistDraft = { name: string; folder: string; items: PlaylistItem[] };
 
-// ---- private team playbook (freezetime/playbook.py) ----
+// ---- playbook (freezetime/playbook.py) ----
 export type PlaybookAttachment = { label: string } & (
   { kind: "board"; board: string } | { kind: "playlist"; playlist: string } |
   ({ kind: "round" } & Omit<PlaylistItem, "id">) | { kind: "recording"; match: string; file: string } |
@@ -178,10 +158,10 @@ export interface TaskUtility {
   type: string; weapon: string; x: number; y: number; z: number; pitch: number; yaw: number; label: string; commands: string;
   source: Omit<PlaylistItem, "id"> & { steamid: string };
 }
-export interface PlaybookTask { text: string; utility: TaskUtility[] }
+export interface PlaybookTask { slot: string; text: string; utility: TaskUtility[] } // slot: a nick or a position
 export interface PlaybookDraft {
   name: string; kind: "strategy" | "protocol" | "setup"; map: string; side: Side | "";
-  description: string; category: string; pinned: boolean; steps: string[]; tasks: Record<string, PlaybookTask>;
+  description: string; category: string; pinned: boolean; steps: string[]; tasks: PlaybookTask[];
   attachments: PlaybookAttachment[]; detector: { site: string; core: { type: string; zone: string }[] } | null;
 }
 export interface PlaybookEntry extends PlaybookDraft { id: string; created: number; updated: number }
@@ -191,15 +171,7 @@ export interface StrategyStats {
   available: boolean; sample: number; rounds: number; wins: number; win_pct: number | null; examples: RoundRef[]; warnings: string[];
 }
 
-// ---- our team's profile (freezetime/team.py) ----
-export interface TeamMember { id: string; nick: string; steamid: string; role: string }
-export interface TeamProfile { format: number; name: string; members: TeamMember[]; updated: number }
-export interface TeamCandidate { steamid: string; nick: string; matches: number }
-export interface TeamInfo {
-  team: TeamProfile;
-  roles: string[];
-  candidates: TeamCandidate[]; // players of our demos who are not on the roster
-}
+export interface TeamPlayer { steamid: string; nick: string; matches: number }
 
 export interface RoundRef {
   match: string;
@@ -607,10 +579,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
       /* not JSON */
     }
     if (detail.startsWith("cs2_")) throw new Error(cs2Error(detail));
-    if (detail.startsWith("access_")) {
-      if (res.status === 401) window.dispatchEvent(new Event("freezetime:session"));
-      throw new Error(td(`access.${detail.slice(7)}`, detail));
-    }
+    if (detail.startsWith("access_")) throw new Error(td(`access.${detail.slice(7)}`, detail));
     throw new Error(`${res.status}: ${detail}`);
   }
   return res.json() as Promise<T>;
@@ -662,23 +631,18 @@ export const api = {
   teams: () => request<Teams>("/api/teams"),
   teamAlias: (raw: string, name: string | null) => request<{ aliases: Record<string, string> }>("/api/teams/alias", json({ raw, name })),
   teamOwn: (name: string | null) => request<{ own: string | null }>("/api/teams/own", json({ name })),
-  session: () => request<Session>("/api/session"),
-  login: (body: { token?: string; member?: string }) => request<Session>("/api/session", json(body)),
-  logout: () => request<{ ok: boolean }>("/api/session", { method: "DELETE" }),
-  newToken: () => request<Session>("/api/session/token", { method: "POST" }),
-  packExport: async (body: { boards: string[] | null; team: boolean; matches: string[]; notes?: boolean; playlists?: boolean; playbook?: boolean }) => {
+  teamPlayers: () => request<TeamPlayer[]>("/api/teams/own/players"),
+  packExport: async (body: { boards: string[] | null; matches: string[]; notes?: boolean; playlists?: boolean; playbook?: boolean }) => {
     const res = await fetch("/api/pack/export", json(body));
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? res.statusText);
     const name = /filename="?([^";]+)/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? "freezetime-pack.zip";
     return { blob: await res.blob(), name };
   },
   packImport: (file: File) => request<PackResult>("/api/pack/import", { method: "PUT", body: file }),
-  notes: (o: { match?: string; mine?: boolean } = {}) =>
-    request<NoteList>(`/api/notes?${query({ ...(o.match ? { match: o.match } : {}), ...(o.mine ? { mine: true } : {}) })}`),
+  notes: (o: { match?: string } = {}) => request<NoteList>(`/api/notes?${query(o.match ? { match: o.match } : {})}`),
   addNote: (n: { match: string; round: number; sec: number; text: string }) => request<Note>("/api/notes", json({ note: n })),
   editNote: (id: string, text: string) => request<Note>(`/api/notes/${id}`, { ...json({ text }), method: "PUT" }),
   deleteNote: (id: string) => request<{ deleted: string }>(`/api/notes/${id}`, { method: "DELETE" }),
-  readNotes: (ids: string[]) => request<{ unread: number }>("/api/notes/read", json({ ids })),
   playlists: () => request<Playlist[]>("/api/playlists"),
   playlist: (id: string) => request<Playlist>(`/api/playlists/${id}`),
   createPlaylist: (p: PlaylistDraft) => request<Playlist>("/api/playlists", json({ playlist: p })),
@@ -689,13 +653,11 @@ export const api = {
   savePlaybookEntry: (item: PlaybookDraft, id?: string) => request<PlaybookEntry>(`/api/playbook/entries${id ? `/${id}` : ""}`, { ...json({ item }), method: id ? "PUT" : "POST" }),
   savePlaybookBook: (item: Pick<PlaybookBook, "name" | "entries">, id?: string) => request<PlaybookBook>(`/api/playbook/books${id ? `/${id}` : ""}`, { ...json({ item }), method: id ? "PUT" : "POST" }),
   deletePlaybookItem: (collection: "entries" | "books", id: string) => request<{ deleted: string }>(`/api/playbook/${collection}/${id}`, { method: "DELETE" }),
-  copyPlaybookUtility: (body: { match: string; round: number; steamid: string; member: string; start: number | null; end: number | null }) =>
+  copyPlaybookUtility: (body: { match: string; round: number; steamid: string; start: number | null; end: number | null }) =>
     request<TaskUtility[]>("/api/playbook/utility", json(body)),
   playbookStats: (id: string) => request<StrategyStats>(`/api/playbook/entries/${id}/stats`),
   discoverStrategies: (matches: string[], team: string, map: string, aliases: Record<string, string>) =>
     request<ScoutReport["playbook"]>("/api/playbook/discover", json({ matches, team, map, aliases })),
-  team: () => request<TeamInfo>("/api/team"),
-  saveTeam: (team: TeamProfile) => request<TeamInfo>("/api/team", { ...json(team), method: "PUT" }),
   scoutReport: (q: ScoutQuery) => request<ScoutReport>(`/api/scout/report?${query(q)}`),
   scoutPoints: (q: ScoutQuery) => request<Points>(`/api/scout/points?${query(q)}`),
   scoutMovement: (q: ScoutQuery, f: Pick<MovementFilter, "player" | "t_from" | "t_to" | "opp_buy" | "pistol" | "man">) =>

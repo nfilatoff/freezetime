@@ -1,7 +1,12 @@
-"""The team's private playbook: shared entries, ordered books and roster tasks.
+"""The playbook: strategies, protocols and setups, ordered books and tasks per player slot.
 
 One entry may belong to several books. Attachments are references, never downloaded media.
+A task belongs to a slot: a free label such as a nick or a position ("Entry", "B anchor").
 All read/modify/write operations share a lock; replacing the file is atomic on Windows too.
+
+Format 1 keyed tasks by roster member ids of the former team profile. It is still read: each
+task gets the member's nick from ``out/team.json`` (or a pack's ``team.json``) as its slot, else
+an empty slot (the page shows it as "Player N"); the file is written as format 2 on the next change.
 """
 
 from __future__ import annotations
@@ -16,11 +21,13 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from freezetime.lineups import MAP_RE, WEAPON_TYPE, lineup_commands, throws
-from freezetime.notes import MATCH_RE, MEMBER_RE
+from freezetime.notes import MATCH_RE
 from freezetime.playlists import PlaylistError, check_item
 
-FORMAT = 1
+FORMAT = 2
 FILE = "playbook.json"
+MAX_TASKS = 10
+SLOT_LEN = 40
 MAX_ENTRIES = 1000
 MAX_BOOKS = 100
 MAX_BYTES = 8 << 20
@@ -127,18 +134,15 @@ def check_entry(entry: dict) -> dict:
         raise PlaybookError("invalid map")
     if side not in ("", "terrorist", "counter-terrorist"):
         raise PlaybookError("invalid side")
-    tasks = entry.get("tasks", {})
-    if not isinstance(tasks, dict) or len(tasks) > 20:
-        raise PlaybookError("tasks is a roster member to task object")
-    checked_tasks = {}
-    for member, task in tasks.items():
-        _id(member, MEMBER_RE)
+    checked_tasks = []
+    for task in _list(entry.get("tasks", []), MAX_TASKS):
         if not isinstance(task, dict):
             raise PlaybookError("a task is an object")
-        checked_tasks[member] = {
+        checked_tasks.append({
+            "slot": " ".join(_text(task.get("slot", ""), SLOT_LEN * 4).split())[:SLOT_LEN],
             "text": _text(task.get("text", ""), 4000),
             "utility": [_utility(u) for u in _list(task.get("utility", []), 100)],
-        }
+        })
     detector = entry.get("detector")
     if detector is not None:
         if not isinstance(detector, dict) or detector.get("site") not in ("A", "B") or not map_name or side == "counter-terrorist":
@@ -176,7 +180,40 @@ def _stamp(value) -> int:
     return int(value)
 
 
-def check_playbook(data) -> dict:
+def roster_nicks(team) -> dict[str, str]:
+    """Member id -> nick from a former team profile (``team.json``); anything unreadable gives none."""
+    members = team.get("members") if isinstance(team, dict) else None
+    if not isinstance(members, list):
+        return {}
+    return {m["id"]: " ".join(m["nick"].split())[:SLOT_LEN] for m in members
+            if isinstance(m, dict) and isinstance(m.get("id"), str) and isinstance(m.get("nick"), str) and m["nick"].strip()}
+
+
+def _local_nicks(out: str | Path) -> dict[str, str]:
+    try:
+        return roster_nicks(json.loads((Path(out) / "team.json").read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        return {}
+
+
+def upgrade(data, nicks: dict[str, str] | None = None):
+    """Format 1 (tasks keyed by roster member id) as format 2 (tasks per slot); other data as it is."""
+    if not isinstance(data, dict) or data.get("format") != 1:
+        return data
+    entries = []
+    for entry in data.get("entries", []) if isinstance(data.get("entries"), list) else []:
+        tasks = entry.get("tasks") if isinstance(entry, dict) else None
+        if isinstance(tasks, dict):
+            if len(tasks) > MAX_TASKS:
+                raise PlaybookError(f"an entry has at most {MAX_TASKS} tasks")
+            entry = entry | {"tasks": [(task if isinstance(task, dict) else {}) | {"slot": (nicks or {}).get(member, "")}
+                                       for member, task in tasks.items()]}
+        entries.append(entry)
+    return data | {"format": FORMAT, "entries": entries}
+
+
+def check_playbook(data, nicks: dict[str, str] | None = None) -> dict:
+    data = upgrade(data, nicks)
     if not isinstance(data, dict) or data.get("format") != FORMAT:
         raise PlaybookError("unsupported playbook format")
     result = {"format": FORMAT}
@@ -204,7 +241,7 @@ def load_playbook(out: str | Path) -> dict:
     try:
         if path.stat().st_size > MAX_BYTES:
             raise PlaybookError("playbook is too big")
-        return check_playbook(json.loads(path.read_text(encoding="utf-8")))
+        return check_playbook(json.loads(path.read_text(encoding="utf-8")), _local_nicks(out))
     except (OSError, ValueError) as e:
         raise PlaybookError(f"cannot read playbook: {e}") from e
 
@@ -224,7 +261,7 @@ def _save(out: str | Path, data: dict) -> None:
 
 
 def save_item(out: str | Path, collection: str, item: dict, item_id: str | None = None) -> dict | None:
-    """Create or replace an entry/book. Only the server's staff routes call this mutation."""
+    """Create or replace an entry/book."""
     if collection not in ("entries", "books"):
         raise PlaybookError("unknown collection")
     checked = check_entry(item) if collection == "entries" else _book(item)
@@ -257,9 +294,11 @@ def delete_item(out: str | Path, collection: str, item_id: str) -> bool:
     return True
 
 
-def merge_playbook(out: str | Path, incoming) -> dict:
-    """Validate the whole incoming file before merging newer entries and books by stable id."""
-    checked = check_playbook(incoming)
+def merge_playbook(out: str | Path, incoming, nicks: dict[str, str] | None = None) -> dict:
+    """Validate the whole incoming file before merging newer entries and books by stable id.
+
+    ``nicks`` names the slots of format 1 tasks (the roster of the computer the pack came from)."""
+    checked = check_playbook(incoming, nicks)
     counts = {"added": 0, "updated": 0, "skipped": 0}
     with _lock:
         data = load_playbook(out)

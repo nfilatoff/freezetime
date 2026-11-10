@@ -21,8 +21,8 @@ Funciones:
 - **Recorte de pausas** — al grabar se eliminan las pausas entre kills más largas que un umbral (3 s por defecto): en el modo «todas las kills» esas kills pasan a ser clips separados, y un highlight sigue siendo un solo vídeo con saltos a la siguiente kill, junto con el sonido.
 - **Idiomas de la interfaz** — inglés, ruso y español. Por defecto inglés; si el idioma del navegador o de Windows es ruso o español, se activa ese. La elección en el panel lateral se recuerda en el navegador.
 - **Pizarra táctica** — dibuja una táctica en cualquier mapa del pool en hasta 4 pasos (default, utilidad, entrada, post-plant): jugadores CT/T y C4 arrastrados desde la barra, 6 granadas con su radio real y punto de lanzamiento, lápiz, flechas, formas y notas de texto. Al arrastrar a un jugador en un paso posterior se graba la ruta que recorre, y la reproducción mueve a los jugadores por sus rutas. Deshacer/rehacer, atajos reasignables, tácticas guardadas con filtro por mapa, exportación a PNG (un paso o todos en cuadrícula), GIF y MP4. El botón «A la pizarra» de la repetición copia el momento actual (jugadores con nombres, humos, fuegos, la bomba), y desde la pizarra se vuelve a ese momento.
-- **Equipo** — un perfil del equipo con su plantilla (nick, SteamID, rol), un servidor del equipo (`freezetime app --team`) que los compañeros abren desde sus ordenadores con un enlace de acceso, y paquetes `.zip` con pizarras, la plantilla y partidas analizadas para quienes no están en el servidor. Todo se queda en vuestros ordenadores: sin nube ni cuentas.
-- **Notas y listas** — una nota con marca de tiempo desde la repetición 2D (`@nick` avisa a un compañero, que la ve en «Para mí» con un contador de no leídas) y listas de rondas o tramos de rondas: carpetas, arrastrar para ordenar, reproducción seguida, corte en GIF/MP4 y grabación en CS2.
+- **Paquetes** — `.zip` con pizarras, notas, listas, el playbook y partidas analizadas, para llevar tu trabajo a otro ordenador. Todo se queda en tu ordenador: sin nube ni cuentas.
+- **Notas y listas** — una nota con marca de tiempo desde la repetición 2D y listas de rondas o tramos de rondas: carpetas, arrastrar para ordenar, reproducción seguida, corte en GIF/MP4 y grabación en CS2.
 
 | Resumen de partida | Tácticas | Mapas |
 |---|---|---|
@@ -135,7 +135,7 @@ freezetime maps derive a.dem b.dem [--output path.json]        # crear/actualiza
 ```
 
 ```powershell
-freezetime app [--out out] [--host 127.0.0.1] [--port 8000] [--no-open-browser] [--team]
+freezetime app [--out out] [--host 127.0.0.1] [--port 8000] [--no-open-browser]
 ```
 Inicia la aplicación web.
 
@@ -154,10 +154,10 @@ Tests: `pytest`. El fixture son las rondas 1–8 de una partida de Dust2, genera
 | `out/maps/` | Dibujos de `freezetime viz zones`. |
 | `out/library.json` | Configuración de la aplicación: carpetas de demos, carpeta de CS2 y puerto de la consola de red, nombres de equipos (`team_aliases`), equipo propio (`own_team`). |
 | `out/boards/<id>.json` | Pizarras tácticas guardadas. |
-| `out/team.json` | El perfil del equipo: nombre y plantilla. |
-| `out/notes.json` | Notas con marca de tiempo: partida, ronda, segundo, texto, autor, menciones, quién las ha leído. |
+| `out/team.json` | Queda de versiones anteriores (el antiguo perfil del equipo). No se usa; si existe, sus nicks nombran las tareas de un playbook antiguo al leerlo. |
+| `out/notes.json` | Notas con marca de tiempo: partida, ronda, segundo, texto. |
 | `out/playlists.json` | Listas: nombre, carpeta, dueño y tramos (partida, ronda, segundos desde–hasta, pie). |
-| `out/playbook.json` | Playbook del equipo: entradas compartidas, libros ordenados, tareas de la plantilla, utilidad copiada y referencias a adjuntos. |
+| `out/playbook.json` | Playbook: entradas, libros ordenados, tareas por hueco de jugador, utilidad copiada y referencias a adjuntos. |
 | `<CS2>/game/csgo/cfg/freezetime_*.cfg` | Lineups y listas de práctica escritos con los botones «Abrir en CS2» e «Instalar en CS2». |
 | `out/_uploads/` | Demos subidas desde la aplicación (y extraídas de archivos comprimidos). |
 | `~/.awpy/<versión>/` | Caché de awpy: radares (`radars/*.png`) y `map_data.json` (transformación de coordenadas, niveles). |
@@ -214,16 +214,14 @@ Los mapas fuera del pool (Overpass, Train, Vertigo, …) no tienen configuració
 | `tactics.py` | Ejecuciones T, setups CT, rotaciones. `SiteZoner` clasifica las posiciones según la configuración del mapa o la heurística de reserva. |
 | `maps/` | Configuraciones de mapas (`<map>.json`) y su carga; búsqueda de zona, grupo y sitio de un punto mediante un ráster. |
 | `mapgen.py` | Crea la configuración de un mapa a partir de demos (`maps derive`). |
-| `aggregate.py` | Agregación por partidas, alias de equipos. |
+| `aggregate.py` | Agregación entre partidas, alias de equipos, jugadores de un equipo en las demos. |
 | `scout.py` | Dosier del rival: tablas por ronda de la partida (`match_data`), selección de rondas del equipo (`select_rounds`), informe y conclusiones (`dossier`), rondas similares, equipos con plantilla compartida. |
 | `replay.py` | Documento de repetición de la ronda (JSON, caché gzip). |
 | `board.py` | Pizarras tácticas: comprobar, guardar y listar `out/boards/<id>.json`. |
-| `team.py` | El perfil del equipo (`out/team.json`): comprobación, almacenamiento, sugerencias de plantilla a partir de nuestras demos. |
-| `pack.py` | Paquetes: exportación e importación de un `.zip` con pizarras, el perfil del equipo y partidas analizadas. |
-| `notes.py` | Notas con marca de tiempo: almacenamiento, menciones `@nick`, marcas de lectura, combinación desde paquetes. |
-| `playlists.py` | Listas: almacenamiento, tramos, permisos del dueño, combinación desde paquetes. |
-| `playbook.py` | Playbook privado: validación, almacenamiento atómico, entradas compartidas, libros, tareas, utilidad de demos y combinación de paquetes. |
-| `app/access.py` | Reglas del servidor del equipo: quién pregunta (este ordenador, cuerpo técnico, jugador) y qué puede hacer. |
+| `pack.py` | Paquetes: exportación e importación de un `.zip` con pizarras, notas, listas, el playbook y partidas analizadas. |
+| `notes.py` | Notas con marca de tiempo: almacenamiento, edición, combinación desde paquetes. |
+| `playlists.py` | Listas: almacenamiento, tramos, combinación desde paquetes. |
+| `playbook.py` | Playbook: validación, almacenamiento atómico, entradas, libros, tareas por hueco, lectura del formato antiguo, utilidad de demos y combinación de paquetes. |
 | `viz.py` | Imágenes sobre el radar (matplotlib mediante `awpy.plot`), paneles por nivel. |
 | `report.py` | Informes en Markdown. |
 | `cli.py` | Comandos `freezetime`. |
@@ -342,33 +340,28 @@ La página «Pizarra» (`#/board`, `freezetime/board.py`, `frontend/src/board.ts
 - **Exportación** — PNG del paso actual o de todos los pasos en cuadrícula con título, GIF o MP4 de la reproducción (práctico para Discord).
 - **Desde la repetición** — «⧉ A la pizarra» copia el momento actual al paso 1: jugadores vivos con nombres y bandos, humos, fuegos, la bomba y lo que hayas dibujado sobre la repetición. «Pizarra» abre una pizarra vacía del mismo mapa. Ambos recuerdan el momento, y «◀ Volver a la repetición» regresa a la misma ronda y segundo.
 
-### Aplicación: equipo (plantilla, servidor del equipo, paquetes)
+### Aplicación: paquetes y enlaces
 
-La página «Equipo» (`#/team`, `freezetime/team.py`, `freezetime/app/access.py`, `freezetime/pack.py`) es donde la aplicación sabe quiénes somos «nosotros» y cómo llegan los compañeros a los mismos datos.
+- **Paquetes** — «Descargar un paquete», al final de la Biblioteca, crea un `.zip` con todas las pizarras, notas, listas, el playbook y, si se eligen, partidas analizadas (solo tablas Parquet: sin `.dem`, sin caché de repetición ni grabaciones). «Importar un paquete…» lo combina con tus datos: una pizarra, nota, lista o entrada del playbook sustituye a la local con el mismo id solo si es más nueva; una partida que ya está en la biblioteca se queda como está. Los nombres de archivo del paquete se comprueban antes de escribir nada. Un paquete de una versión anterior puede traer un perfil del equipo: no se importa.
+- **Enlaces** — «🔗 Enlace» en la repetición copia un enlace a la ronda y al segundo; en una pizarra guardada, a la táctica.
 
-- **Perfil** — el nombre del equipo y la plantilla: nick, SteamID64 (opcional: un entrenador no sale en las demos) y rol (IGL, entry, AWP, lurker, apoyo, ancla, rifler, entrenador, analista, mánager). Los jugadores vistos en tus demos que no están en la plantilla se ofrecen debajo y se añaden con un clic. El nombre del perfil es lo mismo que «nuestro equipo» (★ en la página «Rival»). Los nicks de la plantilla se ofrecen al nombrar a un jugador en la pizarra táctica.
-- **Servidor del equipo** — `freezetime app --team` escucha en todas las interfaces de red e imprime los enlaces de acceso (también están en la página «Equipo»): `http://<dirección>:8000/#/join/<token>`. Los compañeros en la misma red, Tailscale o ZeroTier abren un enlace y eligen su nick de la plantilla. No hay contraseñas: el token deja fuera a los extraños (va en el `#fragmento`, así que no queda en ningún registro del servidor, y la página lo cambia por una cookie) y el nick dice quién eres. «Enlaces nuevos» crea un token nuevo; los enlaces antiguos dejan de funcionar.
-- **Permisos** — el ordenador donde se ejecuta la aplicación es el analista: puede hacerlo todo. El cuerpo técnico (analista, entrenador, mánager, IGL) desde otros ordenadores puede subir y analizar demos, guardar pizarras y editar el equipo. Los jugadores miran. El juego (`/api/cs2/*`), el grabador (`/api/recorder/*`), HLAE, las carpetas de la biblioteca y los archivos de demos solo responden al ordenador del analista: nadie pulsa teclas en el CS2 de otro. Sin `--team` la aplicación rechaza a cualquier otro ordenador, incluso iniciada con `--host 0.0.0.0`.
-- **Paquetes** — «Descargar un paquete» crea un `.zip` con todas las pizarras, el perfil del equipo, notas, listas y, si se eligen, partidas analizadas (solo tablas Parquet: sin `.dem`, sin caché de repetición ni grabaciones). «Importar un paquete…» lo combina con tus datos: una pizarra sustituye a la local con el mismo id solo si es más nueva; una partida que ya está en la biblioteca se queda como está; el perfil del equipo se toma solo mientras no haya plantilla propia. Los nombres de archivo del paquete se comprueban antes de escribir nada.
-- **Enlaces** — «🔗 Enlace» en la repetición copia un enlace a la ronda y al segundo; en una pizarra guardada, a la táctica. En el ordenador del analista el enlace usa la dirección de red del servidor del equipo para que un compañero pueda abrirlo.
-
-El servidor del equipo no tiene HTTPS: úsalo en una red de confianza o a través de Tailscale/ZeroTier, no en internet abierto. Una petición cuenta como «este ordenador» por su dirección de loopback, así que un proxy inverso en la misma máquina convertiría a todos en el analista.
+La aplicación solo responde a su propio ordenador, incluso iniciada con `--host 0.0.0.0`. Las versiones anteriores tenían un servidor del equipo (`--team`) con plantilla, roles y acceso por enlace; se quitó para que la aplicación siga siendo la herramienta de un analista. Su último estado se guarda en la rama `archive/team-server`.
 
 ### Aplicación: notas y listas
 
-- **Notas** — «📝 Nota» en la repetición 2D escribe una nota en el segundo actual de la ronda (`freezetime/notes.py`, `out/notes.json`). Se firma con el nick elegido en la página «Equipo» («analista» en el ordenador de la aplicación si no se ha elegido a nadie). `@nick` nombra a un compañero de la plantilla: la nota aparece en «Para mí» en la página «Notas» (`#/notes`) y el menú muestra el número de menciones sin leer. Las notas de una ronda se listan bajo la repetición y se marcan en su línea de tiempo; un clic salta al momento. La página «Notas» muestra las notas de todas las partidas, primero las más nuevas o por partida y ronda. Una nota la cambia o la borra su autor o el cuerpo técnico. La exportación en Markdown del dosier del rival termina con las notas de sus partidas.
+- **Notas** — «📝 Nota» en la repetición 2D escribe una nota en el segundo actual de la ronda (`freezetime/notes.py`, `out/notes.json`). Las notas de una ronda se listan bajo la repetición y se marcan en su línea de tiempo; un clic salta al momento. La página «Notas» (`#/notes`) muestra las notas de todas las partidas, primero las más nuevas o por partida y ronda, y permite editarlas y borrarlas. La exportación en Markdown del dosier del rival termina con las notas de sus partidas.
 - **Listas** — «☆ A la lista» en la repetición 2D añade la ronda, o un tramo (segundos desde–hasta tras el fin del freezetime; vacío significa desde el fin del freezetime / hasta el final de la ronda), con un pie a una lista nueva o existente (`freezetime/playlists.py`, `out/playlists.json`). La página «Listas» (`#/playlists`) las agrupa por carpeta y muestra las recientes; dentro de una lista, los tramos se reordenan arrastrando y se editan en el sitio. «▶ Reproducir» (`#/playlist/<id>/<tramo>`) reproduce los tramos uno tras otro en la repetición 2D, con paso al siguiente y cambio a otra lista. «Añadir sus highlights» convierte los highlights automáticos y propios de una partida en tramos (los highlights se quedan donde están). Vídeo: cada tramo se dibuja sobre el radar como un clip de highlight, en GIF o MP4, todo en un zip; un tramo hasta el final de la ronda se corta a los 90 s. «Grabar en CS2» (en el ordenador de la aplicación) envía los tramos de una partida al grabador.
-- Las notas y las listas entran en los paquetes junto con las pizarras y el perfil del equipo.
+- Las notas y las listas entran en los paquetes junto con las pizarras y el playbook.
 
-### Aplicación: playbook privado del equipo
+### Aplicación: playbook
 
-La página «Playbook» (`#/playbook`, una entrada en `#/playbook/<id>`) guarda estrategias, protocolos cortos del equipo y posiciones en `out/playbook.json`. El cuerpo técnico edita; los jugadores leen. Cada entrada tiene mapa, lado, categoría, descripción, pasos ordenados y tareas asignadas a los ID estables de la plantilla. «Mis tareas» usa el nick elegido en la página Equipo y muestra las tareas de ese jugador. Es un filtro de visualización: los compañeros siguen pudiendo leer el playbook compartido.
+La página «Playbook» (`#/playbook`, una entrada en `#/playbook/<id>`) guarda estrategias, protocolos cortos y posiciones en `out/playbook.json`. Cada entrada tiene mapa, lado, categoría, descripción, pasos ordenados y tareas de los jugadores. Una tarea pertenece a un hueco: un nick, un rol o una posición («Entry», «Ancla B»); se sugieren los nicks de los jugadores de tu equipo en las demos (★ en la página Rival). Un playbook del formato antiguo, con tareas ligadas a una plantilla, se lee tal cual: cada tarea recibe el nick del jugador de `out/team.json` si existe.
 
 - Crea playbooks con nombre para un mapa, rival o torneo. Una entrada puede estar en varios: cambia su pertenencia en el editor. Arrastra entradas para reordenarlas dentro de un libro o usa la flecha hacia arriba. Las fijadas aparecen primero; la categoría y la fijación se aplican en todos los libros. Eliminar un libro conserva sus entradas; eliminar una entrada la quita de todos los libros.
 - Adjunta una pizarra, una ronda o segmento, una lista, un MP4 del grabador o un enlace HTTPS de YouTube/Twitch. Las rondas y listas se reproducen dentro de la tarjeta; las grabaciones usan el reproductor local. Los enlaces externos se abren en sus sitios: no se descarga ni se integra nada de la red.
-- Para copiar utilidad, adjunta una ronda, asigna un jugador de la plantilla, elige el jugador de la demo bajo su tarea y pulsa «Copiar lanzamientos». Los lanzamientos del intervalo se copian con tipo de granada, posición en el suelo, ángulos, `setpos`/`setang` y enlace a la repetición. Repetir la importación no duplica los mismos lanzamientos. Guarda la entrada para conservar los cambios.
+- Para copiar utilidad, adjunta una ronda, elige el jugador de la demo bajo una tarea y pulsa «Copiar lanzamientos» (primero se elige el jugador cuyo nombre en la demo coincide con el hueco). Los lanzamientos del intervalo se copian con tipo de granada, posición en el suelo, ángulos, `setpos`/`setang` y enlace a la repetición. Repetir la importación no duplica los mismos lanzamientos. Guarda la entrada para conservar los cambios.
 - «Añadir a nuestro playbook» en una estrategia del dosier guarda su firma de utilidad y rondas de ejemplo. La página de agregado permite detectar estrategias en los partidos seleccionados de un mapa con los alias indicados y guardarlas también. Los detectores estiman usos y victorias en nuestros partidos de ese mapa con el mismo umbral de sitio y zonas de humos/molotovs del dosier, excluyendo la utilidad posterior al plant. Es una heurística para estrategias T, no una prueba de la táctica elegida; las entradas escritas a mano no tienen detector salvo que se adopten desde el análisis.
-- TXT, Markdown, XLSX e «Imprimir / PDF» exportan las entradas del libro y filtros actuales, incluido «Mis tareas». Incluyen texto, comandos y enlaces a adjuntos; no integran vídeos ni imágenes de pizarras. La exportación de paquetes en Equipo incluye el playbook si se selecciona y combina las entradas/libros más nuevos por ID. Los adjuntos viajan como referencias: añade las pizarras, listas, plantilla y partidos analizados necesarios; las grabaciones se quedan en el ordenador original.
+- TXT, Markdown, XLSX e «Imprimir / PDF» exportan las entradas del libro y filtros actuales. Incluyen texto, comandos y enlaces a adjuntos; no integran vídeos ni imágenes de pizarras. La exportación de paquetes en la Biblioteca incluye el playbook si se selecciona y combina las entradas/libros más nuevos por ID. Los adjuntos viajan como referencias: añade las pizarras, listas y partidos analizados necesarios; las grabaciones se quedan en el ordenador original.
 
 ### Aplicación: rival (dosier)
 

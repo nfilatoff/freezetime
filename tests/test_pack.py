@@ -10,9 +10,7 @@ from freezetime import notes as N
 from freezetime import playlists as L
 from freezetime import playbook as PB
 from freezetime import pack as P
-from freezetime import team as T
 from tests.test_board import sample as board_sample
-from tests.test_team import sample as team_sample
 
 
 def library(tmp_path, name: str, dust2_mini=None):
@@ -30,22 +28,30 @@ def packed(out, **what) -> io.BytesIO:
     return buf
 
 
-def test_boards_and_team_travel(tmp_path):
+def test_boards_travel(tmp_path):
     a, b = library(tmp_path, "a"), library(tmp_path, "b")
     first, second = B.create_board(a, board_sample()), B.create_board(a, board_sample(name="A exec"))
-    T.save_team(a, team_sample())
-    buf = packed(a, team=True)
-    assert P.read_manifest(buf) | {"created": 0} == {"format": 1, "created": 0, "boards": 2, "team": True, "notes": 0, "playlists": 0, "playbook": 0, "matches": []}
+    (a / "team.json").write_text(json.dumps({"name": "Us", "members": []}), encoding="utf-8")
+    buf = packed(a)
+    assert P.read_manifest(buf) | {"created": 0} == {"format": 1, "created": 0, "boards": 2, "notes": 0, "playlists": 0, "playbook": 0, "matches": []}
+    assert "team.json" not in zipfile.ZipFile(buf).namelist()
 
     result = P.import_pack(b, buf)
-    assert result["boards"] == {"added": 2, "updated": 0, "skipped": 0}
-    assert result["team"] == "added"
+    assert result["boards"] == {"added": 2, "updated": 0, "skipped": 0} and result["team"] is None
     assert B.load_board(b, first["id"]) == first and B.load_board(b, second["id"]) == second
-    assert T.load_team(b)["members"] == T.load_team(a)["members"]
 
-    # again: nothing is newer, and our roster is not replaced by a copy
-    again = P.import_pack(b, packed(a, team=True))
-    assert again["boards"] == {"added": 0, "updated": 0, "skipped": 2} and again["team"] == "kept"
+    again = P.import_pack(b, packed(a))
+    assert again["boards"] == {"added": 0, "updated": 0, "skipped": 2}
+
+
+def test_an_old_pack_with_a_team_profile(tmp_path):
+    team = {"name": "Us", "members": [{"id": "aabbccdd", "nick": "bravo", "role": "awp"}]}
+    playbook = {"format": 1, "books": [], "entries": [
+        {"id": "a" * 12, "name": "B split", "tasks": {"aabbccdd": {"text": "Smoke"}}, "created": 1, "updated": 1}]}
+    result = P.import_pack(tmp_path, zip_of({P.MANIFEST: MANIFEST, "team.json": json.dumps(team), "playbook.json": json.dumps(playbook)}))
+    assert result["team"] == "skipped" and result["playbook"]["added"] == 1
+    assert not (tmp_path / "team.json").exists()
+    assert PB.load_playbook(tmp_path)["entries"][0]["tasks"][0]["slot"] == "bravo"
 
 
 def test_a_newer_board_wins_and_an_older_one_does_not(tmp_path):
@@ -112,7 +118,6 @@ MANIFEST = json.dumps({"format": 1})
     ({P.MANIFEST: MANIFEST, "matches/m/kills.parquet": "x"}, "no manifest"),
     ({P.MANIFEST: MANIFEST, "matches/m/manifest.json": "[]"}, "not a match manifest"),
     ({P.MANIFEST: MANIFEST, "boards/0123456789ab.json": json.dumps({"map": "../x"})}, "bad map"),
-    ({P.MANIFEST: MANIFEST, "team.json": json.dumps({"members": [{"nick": ""}]})}, "nick"),
 ])
 def test_bad_packs_are_refused_and_leave_nothing(tmp_path, files, word):
     out = library(tmp_path, "out")
@@ -129,9 +134,8 @@ def test_not_a_zip(tmp_path):
 
 def test_notes_and_playlists_travel(tmp_path):
     a, b = library(tmp_path, "a"), library(tmp_path, "b")
-    coach = {"id": "cccccccc", "nick": "coach"}
-    note = N.add_note(a, {"match": "m1", "round": 3, "sec": 12.5, "text": "late"}, coach, [])
-    pl = L.create_playlist(a, {"name": "B retakes", "items": [{"match": "m1", "round": 3, "start": 5, "end": 20}]}, coach)
+    note = N.add_note(a, {"match": "m1", "round": 3, "sec": 12.5, "text": "late"})
+    pl = L.create_playlist(a, {"name": "B retakes", "items": [{"match": "m1", "round": 3, "start": 5, "end": 20}]})
     buf = packed(a, boards=[], notes=True, playlists=True)
     assert P.read_manifest(buf)["notes"] == 1 and P.read_manifest(buf)["playlists"] == 1
     result = P.import_pack(b, buf)

@@ -1,16 +1,16 @@
 """Playlists: rounds (or a stretch of a round) to watch in a row, stored in ``out/playlists.json``.
 
-A playlist belongs to the member who made it; staff may change anybody's. Items may come from
-different matches. The file::
+Items may come from different matches. The file::
 
     {"format": 1, "playlists": [
-      {"id": "3f9c0a1b2c4d", "name": "B retakes", "folder": "Mirage", "owner": "a1b2c3d4", "owner_nick": "coach",
+      {"id": "3f9c0a1b2c4d", "name": "B retakes", "folder": "Mirage",
        "items": [{"id": "0a1b2c3d", "match": "...", "round": 7, "start": 12.0, "end": 31.5, "caption": "late rotate"}],
        "created": 1767225600, "updated": 1767225600}
     ]}
 
 ``start`` / ``end`` are seconds after the freeze end; None means from the freeze end / to the end
-of the round.
+of the round. Playlists saved while the app had a team server may carry ``owner`` / ``owner_nick``;
+they are kept as they are and no longer used.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ import time
 import uuid
 from pathlib import Path
 
-from freezetime.notes import MATCH_RE, MEMBER_RE
+from freezetime.notes import MATCH_RE
 
 FORMAT = 1
 FILE = "playlists.json"
@@ -110,19 +110,15 @@ def _check(pl: dict) -> dict:
             c["id"] = uuid.uuid4().hex[:8]
         seen.add(c["id"])
         checked.append(c)
-    owner = str(pl.get("owner") or "")
-    return {
-        "name": name, "folder": _text(pl.get("folder"), 40), "owner": owner if MEMBER_RE.fullmatch(owner) else "",
-        "owner_nick": _text(pl.get("owner_nick"), 32), "items": checked,
-    }
+    return {"name": name, "folder": _text(pl.get("folder"), 40), "items": checked}
 
 
 def get_playlist(out: str | Path, playlist_id: str) -> dict | None:
     return next((p for p in load_playlists(out) if p["id"] == playlist_id), None)
 
 
-def create_playlist(out: str | Path, pl: dict, owner: dict | None) -> dict:
-    data = _check(pl | {"owner": owner["id"] if owner else "", "owner_nick": owner["nick"] if owner else ""})
+def create_playlist(out: str | Path, pl: dict) -> dict:
+    data = _check(pl)
     now = int(time.time())
     data = {"id": uuid.uuid4().hex[:12], **data, "created": now, "updated": now}
     with _lock:
@@ -133,35 +129,26 @@ def create_playlist(out: str | Path, pl: dict, owner: dict | None) -> dict:
     return data
 
 
-def _owned(pl: dict, who_id: str | None, can_edit: bool) -> bool:
-    return can_edit or (bool(who_id) and pl["owner"] == who_id)
-
-
-def update_playlist(out: str | Path, playlist_id: str, pl: dict, who_id: str | None, can_edit: bool) -> dict | None:
-    """Replace name, folder and items; the owner stays. Owner or staff only; None when there is no such playlist."""
+def update_playlist(out: str | Path, playlist_id: str, pl: dict) -> dict | None:
+    """Replace name, folder and items; None when there is no such playlist."""
     with _lock:
         found = load_playlists(out)
         i = next((k for k, p in enumerate(found) if p["id"] == playlist_id), None)
         if i is None:
             return None
         old = found[i]
-        if not _owned(old, who_id, can_edit):
-            raise PermissionError("access_owner")
-        data = _check(pl | {"owner": old["owner"], "owner_nick": old["owner_nick"]})
-        found[i] = {"id": playlist_id, **data, "created": old.get("created", 0), "updated": int(time.time())}
+        found[i] = old | {"id": playlist_id, **_check(pl), "created": old.get("created", 0), "updated": int(time.time())}
         _save(out, found)
     return found[i]
 
 
-def add_item(out: str | Path, playlist_id: str, item: dict, who_id: str | None, can_edit: bool) -> dict | None:
+def add_item(out: str | Path, playlist_id: str, item: dict) -> dict | None:
     """Append one item (the star in the replay)."""
     with _lock:
         found = load_playlists(out)
         pl = next((p for p in found if p["id"] == playlist_id), None)
         if pl is None:
             return None
-        if not _owned(pl, who_id, can_edit):
-            raise PermissionError("access_owner")
         if len(pl["items"]) >= MAX_ITEMS:
             raise PlaylistError(f"a playlist has at most {MAX_ITEMS} items")
         pl["items"] = [*pl["items"], check_item({k: v for k, v in item.items() if k != "id"})]
@@ -170,14 +157,11 @@ def add_item(out: str | Path, playlist_id: str, item: dict, who_id: str | None, 
     return pl
 
 
-def delete_playlist(out: str | Path, playlist_id: str, who_id: str | None, can_edit: bool) -> bool:
+def delete_playlist(out: str | Path, playlist_id: str) -> bool:
     with _lock:
         found = load_playlists(out)
-        pl = next((p for p in found if p["id"] == playlist_id), None)
-        if pl is None:
+        if not any(p["id"] == playlist_id for p in found):
             return False
-        if not _owned(pl, who_id, can_edit):
-            raise PermissionError("access_owner")
         _save(out, [p for p in found if p["id"] != playlist_id])
     return True
 

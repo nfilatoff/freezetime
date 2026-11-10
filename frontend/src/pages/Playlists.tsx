@@ -11,7 +11,6 @@ import { secLabel } from "../components/ReplayExtras";
 import { t } from "../i18n";
 import { exportPlaylist, itemHighlight } from "../playlistExport";
 import { go } from "../router";
-import { useSession } from "../session";
 
 type Item = Playlist["items"][number];
 const RECENT = 5;
@@ -31,7 +30,6 @@ function useLibrary() {
 }
 
 export function PlaylistsPage({ id }: { id?: string }) {
-  const session = useSession();
   const [lists, setLists] = useState<Playlist[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
@@ -52,7 +50,7 @@ export function PlaylistsPage({ id }: { id?: string }) {
   const entry = (p: Playlist) => (
     <a key={p.id} href={`#/playlists/${p.id}`} className={`pl-entry ${p.id === id ? "on" : ""}`}>
       <span>{p.name}</span>
-      <span className="muted small">{t("pl.itemsN", { n: p.items.length })}{p.owner_nick ? ` · ${p.owner_nick}` : ""}</span>
+      <span className="muted small">{t("pl.itemsN", { n: p.items.length })}</span>
     </a>
   );
 
@@ -83,8 +81,7 @@ export function PlaylistsPage({ id }: { id?: string }) {
         </aside>
         <div className="pl-main">
           {selected ? (
-            <PlaylistEditor key={selected.id + selected.updated} pl={selected} onChanged={reload}
-              canChange={!!session?.can_edit || (!!session?.member && session.member.id === selected.owner)} folders={folders.map(([f]) => f).filter(Boolean)} />
+            <PlaylistEditor key={selected.id + selected.updated} pl={selected} onChanged={reload} folders={folders.map(([f]) => f).filter(Boolean)} />
           ) : (
             <div className="muted">{lists?.length ? t("pl.pick") : t("pl.howTo")}</div>
           )}
@@ -94,8 +91,7 @@ export function PlaylistsPage({ id }: { id?: string }) {
   );
 }
 
-function PlaylistEditor({ pl, onChanged, canChange, folders }: { pl: Playlist; onChanged: () => void; canChange: boolean; folders: string[] }) {
-  const session = useSession();
+function PlaylistEditor({ pl, onChanged, folders }: { pl: Playlist; onChanged: () => void; folders: string[] }) {
   const { matches, name: matchName } = useLibrary();
   const [name, setName] = useState(pl.name);
   const [folder, setFolder] = useState(pl.folder);
@@ -159,51 +155,42 @@ function PlaylistEditor({ pl, onChanged, canChange, folders }: { pl: Playlist; o
 
   return (
     <div className="pl-editor">
-      <fieldset className="plain" disabled={!canChange}>
-        <div className="row">
-          <input className="pl-name" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
-          <input list="pl-folders" placeholder={t("pl.folder")} value={folder} maxLength={40} onChange={(e) => setFolder(e.target.value)} />
-          <datalist id="pl-folders">{folders.map((f) => <option key={f} value={f} />)}</datalist>
-          {pl.owner_nick && <span className="muted small">{t("pl.owner", { nick: pl.owner_nick })}</span>}
-        </div>
-      </fieldset>
+      <div className="row">
+        <input className="pl-name" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
+        <input list="pl-folders" placeholder={t("pl.folder")} value={folder} maxLength={40} onChange={(e) => setFolder(e.target.value)} />
+        <datalist id="pl-folders">{folders.map((f) => <option key={f} value={f} />)}</datalist>
+      </div>
       <div className="row">
         <button className="primary" disabled={!items.length || dirty} title={dirty ? t("pl.saveFirst") : undefined} onClick={() => go("playlist", pl.id, 0)}>{t("pl.play")}</button>
-        {canChange && <button disabled={!dirty} onClick={save}>{t("common.save")}</button>}
-        {canChange && <button onClick={remove}>{t("common.delete")}</button>}
+        <button disabled={!dirty} onClick={save}>{t("common.save")}</button>
+        <button onClick={remove}>{t("common.delete")}</button>
         {msg && <span className={msg.error ? "error" : "muted small"}>{msg.text}</span>}
       </div>
 
       {items.length === 0 ? <div className="muted">{t("pl.empty")}</div> : (
         <ol className="pl-items">
           {items.map((it, i) => (
-            <li key={it.id} className={dragging === i ? "dragging" : ""} draggable={canChange}
+            <li key={it.id} className={dragging === i ? "dragging" : ""} draggable
               onDragStart={(e) => { setDragging(i); e.dataTransfer.effectAllowed = "move"; }}
               onDragOver={(e) => { if (dragging !== null) { e.preventDefault(); move(dragging, i); setDragging(i); } }}
               onDragEnd={() => setDragging(null)}>
-              {canChange && <span className="pl-grip" title={t("pl.drag")}>⋮⋮</span>}
+              <span className="pl-grip" title={t("pl.drag")}>⋮⋮</span>
               <button className="link" onClick={() => go("match", it.match, "replay", it.round, it.start ?? 0)} title={t("pl.openInReplay")}>
                 {t("pl.round", { round: it.round })}
               </button>
               <span className="muted small pl-match">{matchName(it.match)}</span>
-              {canChange ? (
-                <>
-                  <input className="sec-input" value={it.start ?? ""} placeholder={t("pl.fromStart")} title={t("pl.from")}
-                    onChange={(e) => { const v = sec(e.target.value); if (v === null || !Number.isNaN(v)) edit(i, { start: v }); }} />
-                  <input className="sec-input" value={it.end ?? ""} placeholder={t("pl.toEndShort")} title={t("pl.to")}
-                    onChange={(e) => { const v = sec(e.target.value); if (v === null || !Number.isNaN(v)) edit(i, { end: v }); }} />
-                  <input className="grow" value={it.caption} placeholder={t("pl.captionPlaceholder")} maxLength={200} onChange={(e) => edit(i, { caption: e.target.value })} />
-                  <button className="small-btn" title={t("common.delete")} onClick={() => setItems(items.filter((_, k) => k !== i))}>✕</button>
-                </>
-              ) : (
-                <span className="small">{itemSpan(it)} {it.caption}</span>
-              )}
+              <input className="sec-input" value={it.start ?? ""} placeholder={t("pl.fromStart")} title={t("pl.from")}
+                onChange={(e) => { const v = sec(e.target.value); if (v === null || !Number.isNaN(v)) edit(i, { start: v }); }} />
+              <input className="sec-input" value={it.end ?? ""} placeholder={t("pl.toEndShort")} title={t("pl.to")}
+                onChange={(e) => { const v = sec(e.target.value); if (v === null || !Number.isNaN(v)) edit(i, { end: v }); }} />
+              <input className="grow" value={it.caption} placeholder={t("pl.captionPlaceholder")} maxLength={200} onChange={(e) => edit(i, { caption: e.target.value })} />
+              <button className="small-btn" title={t("common.delete")} onClick={() => setItems(items.filter((_, k) => k !== i))}>✕</button>
             </li>
           ))}
         </ol>
       )}
 
-      {canChange && matches.size > 0 && (
+      {matches.size > 0 && (
         <div className="row">
           <select value={fromMatch} onChange={(e) => setFromMatch(e.target.value)}>
             <option value="">{t("pl.pickMatch")}</option>
@@ -227,7 +214,7 @@ function PlaylistEditor({ pl, onChanged, canChange, folders }: { pl: Playlist; o
         <span className="muted small">{t("pl.exportHint")}</span>
       </div>
 
-      {session?.local && inMatches.length > 0 && (
+      {inMatches.length > 0 && (
         <>
           <h3>{t("pl.record")}</h3>
           <div className="row">

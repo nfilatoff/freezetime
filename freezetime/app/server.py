@@ -7,6 +7,7 @@ per extract directory and invalidated when its ``manifest.json`` changes.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import locale
 import os
@@ -27,14 +28,12 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 
-from freezetime.aggregate import aggregate
+from freezetime.aggregate import aggregate, team_players
 from freezetime.board import BoardError, create_board, delete_board, list_boards, load_board, update_board
-from freezetime.team import ROLES, TeamError, candidates, load_team, rename_team, save_team
 from freezetime.pack import PackError, export_pack, import_pack
-from freezetime.notes import NoteError, add_note, delete_note, load_notes, mark_read, unread_for, update_note
+from freezetime.notes import NoteError, add_note, delete_note, load_notes, update_note
 from freezetime.playlists import PlaylistError, add_item, create_playlist, delete_playlist, get_playlist, load_playlists, update_playlist
 from freezetime import playbook as playbook_mod
-from freezetime.app import access
 from freezetime.app.archives import is_archive, unpack
 from freezetime.app.cs2 import BIND_COMMAND, SETTLE, CS2Bridge, NoConsole, game_running, steam_account
 from freezetime.app import hlae
@@ -505,98 +504,35 @@ def _map_meta(map_name: str) -> dict:
     }
 
 
-def create_app(out: str | Path = "out", team: bool = False) -> FastAPI:
-    """``team`` turns on the team server: other computers are let in with the team token (see ``access.py``)."""
+def is_local(host: str | None) -> bool:
+    """A request from this computer itself (loopback), not merely from the same network."""
+    if not host:
+        return False
+    if host == "localhost":
+        return True
+    try:
+        addr = ipaddress.ip_address(host.split("%")[0])
+    except ValueError:
+        return False
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+        addr = addr.ipv4_mapped
+    return addr.is_loopback
+
+
+def create_app(out: str | Path = "out") -> FastAPI:
+    """The app answers this computer only: its data, the game and the recorder are one analyst's."""
     lib = Library(Path(out))
     jobs = JobQueue()
     cs2 = CS2Bridge(lib.setting, lib.set_setting)
     recorder = Recorder(cs2)
     api = FastAPI(title="Freezetime")
 
-    # ---- who is asking ----
-    def team_token() -> str | None:
-        if not team:
-            return None
-        token = lib.setting("team_token")
-        if not token or not access.TOKEN_RE.fullmatch(str(token)):
-            token = access.new_token()
-            lib.set_setting("team_token", token)
-        return token
-
-    def who_is(request: Request, cookies: dict | None = None) -> access.Who:
-        host = request.client.host if request.client else None
-        return access.identify(host, request.cookies if cookies is None else cookies, team_token(), load_team(lib.out)["members"])
-
     @api.middleware("http")
     async def guard(request: Request, call_next):
-        """Every /api request passes the rules of ``access.py`` before it reaches an endpoint."""
-        who = who_is(request)
-        refused = access.verdict(who, request.method, request.url.path, team)
-        if refused:
-            return JSONResponse({"detail": refused[1]}, status_code=refused[0])
-        request.state.who = who
+        """Other computers get nothing from /api, also when the app listens on every interface."""
+        if request.url.path.startswith("/api/") and not is_local(request.client.host if request.client else None):
+            return JSONResponse({"detail": "access_local_only"}, status_code=403)
         return await call_next(request)
-
-    def session_payload(who: access.Who) -> dict:
-        profile = load_team(lib.out)
-        public = lambda m: {"id": m["id"], "nick": m["nick"], "role": m["role"]}  # noqa: E731 - no SteamIDs to visitors
-        data = {
-            "mode": "team" if team else "local",
-            "local": who.local,
-            "role": who.role,
-            "can_edit": who.can_edit,
-            "need": who.need if team or who.local else "team_mode",
-            "member": public(who.member) if who.member else None,
-            "team": lib.setting("own_team") or profile["name"],
-            # the roster is shown to pick a nick from, and only to those who hold the token
-            "members": [public(m) for m in profile["members"]] if who.token_ok else [],
-        }
-        if who.local and team:
-            data["share"] = {"token": team_token(), "addresses": access.lan_addresses()}
-        return data
-
-    @api.get("/api/session")
-    def session_get(request: Request) -> dict:
-        return session_payload(who_is(request))
-
-    @api.post("/api/session")
-    def session_post(request: Request, token: str | None = Body(None), member: str | None = Body(None)) -> JSONResponse:
-        """Trade the team token for a cookie and/or say which roster member you are (``""`` forgets it)."""
-        cookies = dict(request.cookies)
-        if token is not None:
-            cookies[access.TOKEN_COOKIE] = token
-        who = who_is(request, cookies)
-        if not who.token_ok:
-            raise HTTPException(401, "access_token")
-        if member is not None:
-            cookies[access.MEMBER_COOKIE] = member
-            who = who_is(request, cookies)
-            if member and who.member is None:
-                raise HTTPException(404, "access_no_member")
-        response = JSONResponse(session_payload(who))
-        keep = {"max_age": 180 * 86400, "httponly": True, "samesite": "strict", "path": "/"}
-        if token is not None and not who.local:
-            response.set_cookie(access.TOKEN_COOKIE, token, **keep)
-        if member:
-            response.set_cookie(access.MEMBER_COOKIE, member, **keep)
-        elif member == "":
-            response.delete_cookie(access.MEMBER_COOKIE, path="/")
-        return response
-
-    @api.delete("/api/session")
-    def session_delete() -> JSONResponse:
-        response = JSONResponse({"ok": True})
-        response.delete_cookie(access.TOKEN_COOKIE, path="/")
-        response.delete_cookie(access.MEMBER_COOKIE, path="/")
-        return response
-
-    @api.post("/api/session/token")
-    def session_new_token(request: Request) -> dict:
-        """A new team token: every link handed out before stops working."""
-        if not team:
-            raise HTTPException(409, "access_no_team_mode")
-        lib.set_setting("team_token", access.new_token())
-        return session_payload(who_is(request))
 
     @api.exception_handler(NoConsole)
     def no_console(_request: Request, e: NoConsole) -> JSONResponse:
@@ -658,8 +594,6 @@ def create_app(out: str | Path = "out", team: bool = False) -> FastAPI:
             demos.append({"path": str(p), "name": p.name, "size_mb": round(st.st_size / 2**20, 1), "map": _demo_map(str(p), st.st_mtime),
                           "match_id": p.stem, "uploaded": p.parent == lib.out / UPLOADS,
                           "extracted": (lib.out / p.stem / "manifest.json").exists(), "job": job.id if job else None})
-        if not request.state.who.local:  # the analyst's folders and demo files are nobody else's business
-            return {"out": "", "folders": [], "matches": matches, "demos": []}
         return {"out": str(lib.out.resolve()), "folders": lib.folders(), "matches": matches, "demos": demos}
 
     @api.post("/api/library/folders")
@@ -1060,7 +994,7 @@ def create_app(out: str | Path = "out", team: bool = False) -> FastAPI:
             raise HTTPException(400, str(e)) from e
         return {"deleted": board_id}
 
-    # ---- packs: team work as a .zip, for those who are not on the team server ----
+    # ---- packs: boards, notes, playlists, the playbook and parsed matches as a .zip, to carry to another computer ----
     def temp_zip() -> Path:
         fd, name = tempfile.mkstemp(prefix="freezetime-pack-", suffix=".zip")
         os.close(fd)  # Windows will not delete a file somebody still holds open
@@ -1068,7 +1002,7 @@ def create_app(out: str | Path = "out", team: bool = False) -> FastAPI:
 
     @api.post("/api/pack/export")
     def pack_export(
-        boards: list[str] | None = Body(None), team: bool = Body(False), matches: list[str] = Body(default_factory=list),
+        boards: list[str] | None = Body(None), matches: list[str] = Body(default_factory=list),
         notes: bool = Body(False), playlists: bool = Body(False), playbook: bool = Body(False),
     ) -> FileResponse:
         """``boards``: ids, or null for every board."""
@@ -1076,7 +1010,7 @@ def create_app(out: str | Path = "out", team: bool = False) -> FastAPI:
             lib.match_dir(match_id)
         tmp = temp_zip()
         try:
-            export_pack(lib.out, tmp, boards=boards, team=team, notes=notes, playlists=playlists, playbook=playbook, matches=matches)
+            export_pack(lib.out, tmp, boards=boards, notes=notes, playlists=playlists, playbook=playbook, matches=matches)
         except PackError as e:
             tmp.unlink(missing_ok=True)
             raise HTTPException(400, str(e)) from e
@@ -1095,67 +1029,40 @@ def create_app(out: str | Path = "out", team: bool = False) -> FastAPI:
             raise HTTPException(400, str(e)) from e
         finally:
             tmp.unlink(missing_ok=True)
-        if result["team"] == "added" and not lib.setting("own_team"):
-            lib.set_setting("own_team", load_team(lib.out)["name"] or None)
         return result
 
-    # ---- notes with a timecode and playlists: every member writes their own ----
-    def me(request: Request) -> tuple[dict | None, str | None, bool]:
-        who = request.state.who
-        return who.member, who.member["id"] if who.member else None, who.can_edit
-
-    def members() -> list[dict]:
-        return load_team(lib.out)["members"]
-
+    # ---- notes with a timecode and playlists ----
     @api.get("/api/notes")
-    def notes_list(request: Request, match: str | None = None, mine: bool = False) -> dict:
-        """Notes, the newest first; ``match`` narrows to one match, ``mine`` to the ones mentioning me."""
-        _, my_id, _ = me(request)
+    def notes_list(match: str | None = None) -> dict:
+        """Notes, the newest first; ``match`` narrows to one match."""
         found = load_notes(lib.out)
-        unread = unread_for(found, my_id)
         if match:
             found = [n for n in found if n["match"] == match]
-        if mine:
-            found = [n for n in found if my_id and my_id in n.get("mentions", [])]
-        return {"notes": sorted(found, key=lambda n: -n["created"]), "unread": len(unread), "me": my_id}
+        return {"notes": sorted(found, key=lambda n: -n["created"])}
 
     @api.post("/api/notes")
-    def notes_add(request: Request, note: dict = Body(..., embed=True)) -> dict:
-        author, _, _ = me(request)
+    def notes_add(note: dict = Body(..., embed=True)) -> dict:
         lib.match_dir(str(note.get("match", "")))
         try:
-            return add_note(lib.out, note, author, members())
+            return add_note(lib.out, note)
         except NoteError as e:
             raise HTTPException(400, str(e)) from e
 
     @api.put("/api/notes/{note_id}")
-    def notes_update(request: Request, note_id: str, text: str = Body(..., embed=True)) -> dict:
-        _, my_id, can_edit = me(request)
+    def notes_update(note_id: str, text: str = Body(..., embed=True)) -> dict:
         try:
-            note = update_note(lib.out, note_id, text, my_id, can_edit, members())
+            note = update_note(lib.out, note_id, text)
         except NoteError as e:
             raise HTTPException(400, str(e)) from e
-        except PermissionError as e:
-            raise HTTPException(403, str(e)) from e
         if note is None:
             raise HTTPException(404, f"no note {note_id}")
         return note
 
     @api.delete("/api/notes/{note_id}")
-    def notes_delete(request: Request, note_id: str) -> dict:
-        _, my_id, can_edit = me(request)
-        try:
-            if not delete_note(lib.out, note_id, my_id, can_edit):
-                raise HTTPException(404, f"no note {note_id}")
-        except PermissionError as e:
-            raise HTTPException(403, str(e)) from e
+    def notes_delete(note_id: str) -> dict:
+        if not delete_note(lib.out, note_id):
+            raise HTTPException(404, f"no note {note_id}")
         return {"deleted": note_id}
-
-    @api.post("/api/notes/read")
-    def notes_read(request: Request, ids: list[str] = Body(..., embed=True)) -> dict:
-        _, my_id, _ = me(request)
-        mark_read(lib.out, ids, my_id or "")
-        return {"unread": len(unread_for(load_notes(lib.out), my_id))}
 
     @api.get("/api/playlists")
     def playlists_list() -> list[dict]:
@@ -1174,35 +1081,29 @@ def create_app(out: str | Path = "out", team: bool = False) -> FastAPI:
             result = fn(*args)
         except PlaylistError as e:
             raise HTTPException(400, str(e)) from e
-        except PermissionError as e:
-            raise HTTPException(403, str(e)) from e
         if result is None or result is False:
             raise HTTPException(404, "no such playlist")
         return result
 
     @api.post("/api/playlists")
-    def playlists_create(request: Request, playlist: dict = Body(..., embed=True)) -> dict:
-        owner, _, _ = me(request)
-        return playlist_call(create_playlist, lib.out, playlist, owner)
+    def playlists_create(playlist: dict = Body(..., embed=True)) -> dict:
+        return playlist_call(create_playlist, lib.out, playlist)
 
     @api.put("/api/playlists/{playlist_id}")
-    def playlists_update(request: Request, playlist_id: str, playlist: dict = Body(..., embed=True)) -> dict:
-        _, my_id, can_edit = me(request)
-        return playlist_call(update_playlist, lib.out, playlist_id, playlist, my_id, can_edit)
+    def playlists_update(playlist_id: str, playlist: dict = Body(..., embed=True)) -> dict:
+        return playlist_call(update_playlist, lib.out, playlist_id, playlist)
 
     @api.post("/api/playlists/{playlist_id}/items")
-    def playlists_add_item(request: Request, playlist_id: str, item: dict = Body(..., embed=True)) -> dict:
-        _, my_id, can_edit = me(request)
+    def playlists_add_item(playlist_id: str, item: dict = Body(..., embed=True)) -> dict:
         lib.match_dir(str(item.get("match", "")))
-        return playlist_call(add_item, lib.out, playlist_id, item, my_id, can_edit)
+        return playlist_call(add_item, lib.out, playlist_id, item)
 
     @api.delete("/api/playlists/{playlist_id}")
-    def playlists_delete(request: Request, playlist_id: str) -> dict:
-        _, my_id, can_edit = me(request)
-        playlist_call(delete_playlist, lib.out, playlist_id, my_id, can_edit)
+    def playlists_delete(playlist_id: str) -> dict:
+        playlist_call(delete_playlist, lib.out, playlist_id)
         return {"deleted": playlist_id}
 
-    # ---- private playbook: everyone reads; the guard restricts writes to staff ----
+    # ---- playbook: strategies, protocols and setups with books, steps and player tasks ----
     @api.exception_handler(playbook_mod.PlaybookError)
     async def playbook_error(_request: Request, error: playbook_mod.PlaybookError):
         return JSONResponse({"detail": str(error)}, status_code=400)
@@ -1214,10 +1115,8 @@ def create_app(out: str | Path = "out", team: bool = False) -> FastAPI:
     @api.post("/api/playbook/utility")
     def playbook_utility(
         match: str = Body(...), round: int = Body(...), steamid: str = Body(...),
-        member: str = Body(...), start: float | None = Body(None), end: float | None = Body(None),
+        start: float | None = Body(None), end: float | None = Body(None),
     ) -> list[dict]:
-        if member not in {m["id"] for m in members()}:
-            raise HTTPException(404, "no roster member")
         d = lib.match_dir(match)
         ov = _overview(d, _stamp(d))
         if round not in {r["round"] for r in ov["timeline"]} or steamid not in {str(p["steamid"]) for p in ov["players"]}:
@@ -1245,7 +1144,7 @@ def create_app(out: str | Path = "out", team: bool = False) -> FastAPI:
         entry = next((e for e in playbook_mod.load_playbook(lib.out)["entries"] if e["id"] == entry_id), None)
         if entry is None:
             raise HTTPException(404, "no playbook entry")
-        own = lib.setting("own_team") or load_team(lib.out)["name"]
+        own = lib.setting("own_team")
         empty = {"rounds": 0, "wins": 0, "win_pct": None, "examples": [], "sample": 0, "warnings": []}
         if not own or not entry["detector"]:
             return empty | {"available": False}
@@ -1360,30 +1259,13 @@ def create_app(out: str | Path = "out", team: bool = False) -> FastAPI:
     @api.post("/api/teams/own")
     def team_own(name: str | None = Body(None, embed=True)) -> dict:
         lib.set_setting("own_team", name or None)
-        rename_team(lib.out, name)  # the profile is about the same team
         return {"own": name or None}
 
-    def team_payload(profile: dict) -> dict:
+    @api.get("/api/teams/own/players")
+    def team_own_players() -> list[dict]:
+        """Players of our team in the demos, the most frequent first: nicks to offer on the board and in the playbook."""
         own = lib.setting("own_team")
-        return {
-            "team": profile | {"name": own or profile["name"]},
-            "roles": list(ROLES),
-            "candidates": candidates(match_index(), own, lib.aliases(), profile["members"]) if own else [],
-        }
-
-    @api.get("/api/team")
-    def team_get() -> dict:
-        """Our team's profile, the roles a member can have, and players of our demos not on the roster yet."""
-        return team_payload(load_team(lib.out))
-
-    @api.put("/api/team")
-    def team_put(team: dict = Body(...)) -> dict:
-        try:
-            saved = save_team(lib.out, team)
-        except TeamError as e:
-            raise HTTPException(400, str(e)) from e
-        lib.set_setting("own_team", saved["name"] or None)  # "our team" everywhere else follows the profile
-        return team_payload(saved)
+        return team_players(match_index(), own, lib.aliases()) if own else []
 
     @api.get("/api/scout/report")
     def scout_report(team: str, map: str, last: int = 10, side: str = "", buy: str = "", rounds_last: int = 0) -> dict:

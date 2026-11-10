@@ -1,5 +1,5 @@
 import { strToU8, zipSync } from "fflate";
-import { type PlaybookAttachment, type PlaybookEntry, type TeamMember, recordingUrl } from "./api";
+import { type PlaybookAttachment, type PlaybookEntry, type PlaybookTask, recordingUrl } from "./api";
 import { t } from "./i18n";
 import { nadeLabel } from "./components/InsightCards";
 
@@ -11,15 +11,16 @@ export function attachmentLink(a: PlaybookAttachment): string {
   return a.url;
 }
 
-export function playbookText(name: string, entries: PlaybookEntry[], roster: TeamMember[], mine?: string, markdown = false): string {
-  const nick = (id: string) => roster.find((m) => m.id === id)?.nick ?? id;
+/** A task's heading: its slot, or "Player N" when the slot was left empty. */
+export const slotLabel = (task: PlaybookTask, i: number) => task.slot || t("pb.playerN", { n: i + 1 });
+
+export function playbookText(name: string, entries: PlaybookEntry[], markdown = false): string {
   const lines = [markdown ? `# ${name}` : name, ""];
   for (const e of entries) {
     lines.push(`${markdown ? "## " : ""}${e.name}`, [t(`pb.kind.${e.kind}`), e.map, e.side === "terrorist" ? "T" : e.side === "counter-terrorist" ? "CT" : "", e.category].filter(Boolean).join(" · "), e.description, "");
     e.steps.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
-    for (const [id, task] of Object.entries(e.tasks)) {
-      if (mine && mine !== id) continue;
-      lines.push("", `${markdown ? "### " : ""}${nick(id)}`, task.text);
+    for (const [i, task] of e.tasks.entries()) {
+      lines.push("", `${markdown ? "### " : ""}${slotLabel(task, i)}`, task.text);
       for (const u of task.utility) lines.push(`- ${u.label || nadeLabel(u.type)}: ${u.commands}`, `  ${attachmentLink({ kind: "round", label: "", ...u.source })}`);
     }
     for (const a of e.attachments) lines.push(`- ${a.label || t(`pb.attachment.${a.kind}`)}: ${attachmentLink(a)}`);
@@ -30,12 +31,12 @@ export function playbookText(name: string, entries: PlaybookEntry[], roster: Tea
 
 const xml = (s: string) => s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-/** A small offline workbook: inline strings preserve nicks, SteamIDs and literal console commands. */
-export function playbookXlsx(entries: PlaybookEntry[], roster: TeamMember[], mine?: string): Blob {
+/** A small offline workbook: inline strings preserve nicks and literal console commands. */
+export function playbookXlsx(entries: PlaybookEntry[]): Blob {
   const rows = [[t("pb.name"), t("pb.kind"), t("pb.map"), t("pb.side"), t("pb.category"), t("pb.description"), t("pb.steps"), t("pb.tasks"), t("pb.attachments")],
     ...entries.map((e) => [e.name, t(`pb.kind.${e.kind}`), e.map, e.side === "terrorist" ? "T" : e.side === "counter-terrorist" ? "CT" : "", e.category, e.description, e.steps.join("\n"),
-      Object.entries(e.tasks).filter(([id]) => !mine || mine === id).map(([id, task]) =>
-        `${roster.find((m) => m.id === id)?.nick ?? id}: ${task.text}\n${task.utility.map((u) => `${u.label || nadeLabel(u.type)}: ${u.commands}`).join("\n")}`).join("\n\n"),
+      e.tasks.map((task, i) =>
+        `${slotLabel(task, i)}: ${task.text}\n${task.utility.map((u) => `${u.label || nadeLabel(u.type)}: ${u.commands}`).join("\n")}`).join("\n\n"),
       e.attachments.map((a) => `${a.label || t(`pb.attachment.${a.kind}`)}: ${attachmentLink(a)}`).join("\n")])];
   const ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
   const files = {

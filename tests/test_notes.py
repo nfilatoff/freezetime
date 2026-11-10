@@ -1,44 +1,20 @@
+import json
+
 import pytest
 
 from freezetime import notes as N
 
-ROSTER = [
-    {"id": "aaaaaaaa", "nick": "alpha"},
-    {"id": "bbbbbbbb", "nick": "bravo"},
-    {"id": "cccccccc", "nick": "coach"},
-    {"id": "dddddddd", "nick": "alpha2"},
-]
-COACH, BRAVO = ROSTER[2], ROSTER[1]
-
 
 def note(**over):
-    return {"match": "m1", "round": 7, "sec": 23.46, "text": "  @bravo rotate earlier, @ALPHA  "} | over
-
-
-def test_mentions():
-    assert sorted(N.mentions("@bravo and @Alpha", ROSTER)) == ["aaaaaaaa", "bbbbbbbb"]
-    assert N.mentions("@alpha2 only", ROSTER) == ["dddddddd"]  # the longer nick wins
-    assert N.mentions("@bravo, again @bravo", ROSTER) == ["bbbbbbbb"]  # once
-    assert N.mentions("@bravos", ROSTER) == []
-    assert N.mentions("no one", ROSTER) == []
+    return {"match": "m1", "round": 7, "sec": 23.46, "text": "  rotate earlier  "} | over
 
 
 def test_add_and_load(tmp_path):
-    made = N.add_note(tmp_path, note(), COACH, ROSTER)
+    made = N.add_note(tmp_path, note(author="bbbbbbbb", mentions=["bbbbbbbb"]))
     assert N.ID_RE.fullmatch(made["id"])
-    assert made["text"] == "@bravo rotate earlier, @ALPHA" and made["sec"] == 23.5
-    assert made["author"] == "cccccccc" and made["author_nick"] == "coach"
-    assert sorted(made["mentions"]) == ["aaaaaaaa", "bbbbbbbb"]
-    assert made["read_by"] == ["cccccccc"]
+    assert made["text"] == "rotate earlier" and made["sec"] == 23.5
+    assert set(made) == {"id", "match", "round", "sec", "text", "created", "updated"}  # no author or mentions any more
     assert N.load_notes(tmp_path) == [made]
-    # the analyst's computer with nobody chosen
-    anon = N.add_note(tmp_path, note(text="plain"), None, ROSTER)
-    assert anon["author"] == "" and anon["read_by"] == []
-
-
-def test_author_cannot_be_forged(tmp_path):
-    made = N.add_note(tmp_path, note(author="bbbbbbbb", author_nick="bravo"), COACH, ROSTER)
-    assert made["author"] == "cccccccc"
 
 
 @pytest.mark.parametrize("bad, word", [
@@ -47,41 +23,31 @@ def test_author_cannot_be_forged(tmp_path):
 ])
 def test_bad_notes(tmp_path, bad, word):
     with pytest.raises(N.NoteError, match=word):
-        N.add_note(tmp_path, note(**bad), COACH, ROSTER)
+        N.add_note(tmp_path, note(**bad))
 
 
-def test_unread_and_read(tmp_path):
-    made = N.add_note(tmp_path, note(), COACH, ROSTER)
-    notes = N.load_notes(tmp_path)
-    assert [n["id"] for n in N.unread_for(notes, "bbbbbbbb")] == [made["id"]]
-    assert N.unread_for(notes, "cccccccc") == []  # the author's own note
-    assert N.unread_for(notes, None) == []
-    assert N.mark_read(tmp_path, [made["id"]], "bbbbbbbb") == 1
-    assert N.mark_read(tmp_path, [made["id"]], "bbbbbbbb") == 0
-    assert N.mark_read(tmp_path, [made["id"]], "") == 0
-    assert N.unread_for(N.load_notes(tmp_path), "bbbbbbbb") == []
-
-
-def test_only_the_author_or_staff_edit(tmp_path):
-    made = N.add_note(tmp_path, note(), COACH, ROSTER)
-    N.mark_read(tmp_path, [made["id"]], "bbbbbbbb")
-    with pytest.raises(PermissionError):
-        N.update_note(tmp_path, made["id"], "mine now", "bbbbbbbb", False, ROSTER)
-    with pytest.raises(PermissionError):
-        N.delete_note(tmp_path, made["id"], None, False)
-    changed = N.update_note(tmp_path, made["id"], "@bravo new text", "cccccccc", False, ROSTER)
-    assert changed["text"] == "@bravo new text" and changed["mentions"] == ["bbbbbbbb"]
-    assert changed["read_by"] == ["cccccccc"]  # news again for bravo
-    assert N.update_note(tmp_path, made["id"], "by staff", "bbbbbbbb", True, ROSTER)["text"] == "by staff"
-    assert N.update_note(tmp_path, "0" * 12, "x", "cccccccc", True, ROSTER) is None
-    assert N.delete_note(tmp_path, made["id"], "cccccccc", False)
+def test_edit_and_delete(tmp_path):
+    made = N.add_note(tmp_path, note())
+    changed = N.update_note(tmp_path, made["id"], " new text ")
+    assert changed["text"] == "new text" and changed["updated"] >= made["updated"]
+    assert N.update_note(tmp_path, "0" * 12, "x") is None
+    assert N.delete_note(tmp_path, made["id"])
     assert N.load_notes(tmp_path) == []
-    assert not N.delete_note(tmp_path, made["id"], "cccccccc", True)
+    assert not N.delete_note(tmp_path, made["id"])
+
+
+def test_notes_from_the_team_server_keep_their_old_fields(tmp_path):
+    old = {"id": "3f9c0a1b2c4d", "match": "m1", "round": 7, "sec": 1.0, "text": "@bravo look", "author": "a1b2c3d4",
+           "author_nick": "coach", "mentions": ["e5f6a7b8"], "read_by": [], "created": 1, "updated": 1}
+    (tmp_path / "notes.json").write_text(json.dumps({"format": 1, "notes": [old]}), encoding="utf-8")
+    changed = N.update_note(tmp_path, old["id"], "look")
+    assert changed == old | {"text": "look", "updated": changed["updated"]}
+    assert N.load_notes(tmp_path) == [changed]
 
 
 def test_merge(tmp_path):
     a, b = tmp_path / "a", tmp_path / "b"
-    made = N.add_note(a, note(), COACH, ROSTER)
+    made = N.add_note(a, note())
     assert N.merge_notes(b, N.load_notes(a)) == {"added": 1, "updated": 0, "skipped": 0}
     assert N.merge_notes(b, N.load_notes(a)) == {"added": 0, "updated": 0, "skipped": 1}
     newer = made | {"text": "edited", "updated": made["updated"] + 5}

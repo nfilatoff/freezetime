@@ -11,7 +11,7 @@ import { reasonLabel, t, type Key } from "../i18n";
 import { CalloutToggle } from "./CalloutToggle";
 import { ToolIcon } from "./Icons";
 import { KillCard } from "./KillCard";
-import { shareUrl } from "../session";
+import { shareUrl } from "../share";
 import { NoteForm, RoundNotes, StarForm } from "./ReplayExtras";
 
 const SPEEDS = [0.25, 0.5, 1, 2, 4, 8];
@@ -638,7 +638,7 @@ function Timeline({ r, tick, onSeek, notes }: { r: Replay; tick: number; onSeek:
       ))}
       {notes.map((n) => (
         <div key={n.id} className="tl-note" style={{ left: pct(Math.max(r.start_tick, Math.min(r.last_tick, r.freeze_end_tick + n.sec * r.tick_rate))) }}
-          title={`${n.author_nick || t("notes.analyst")}: ${n.text}`} />
+          title={n.text} />
       ))}
       <div className="tl-head" style={{ left: pct(tick) }} />
     </div>

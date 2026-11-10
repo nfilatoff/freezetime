@@ -1,5 +1,5 @@
 // Hash routes: #/ (library), #/match/<id>/<tab>[/<round>[/<seconds after freeze end>]], #/aggregate, #/clip, #/lineups,
-// #/highlights[/<id>], #/callouts[/<map>], #/team, #/notes[/me], #/playlists[/<id>], #/playlist/<id>/<item>, #/board[/<id>|draft], #/scout[/<team>[/<map>[/<tab>]]][?last=&side=&buy=&rounds=]
+// #/highlights[/<id>], #/callouts[/<map>], #/notes, #/playlists[/<id>], #/playlist/<id>/<item>, #/board[/<id>|draft], #/scout[/<team>[/<map>[/<tab>]]][?last=&side=&buy=&rounds=]
 
 /** The /-separated parts of the hash route, decoded. */
 export const hashParts = () =>

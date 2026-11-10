@@ -17,7 +17,7 @@ import { t, type Key } from "../i18n";
 import { RADAR_SIZE, levelLabel, panelLevels, useMapAssets, CT_COLOR, T_COLOR } from "../radar";
 import { NADE_COLORS } from "../replayDraw";
 import { go } from "../router";
-import { copyText, shareUrl } from "../session";
+import { copyText, shareUrl } from "../share";
 
 const TOOLS: [Tool, Key][] = [
   ["select", "board.tool.select"], ["pen", "board.tool.pen"], ["arrow", "board.tool.arrow"], ["rect", "board.tool.rect"],
@@ -124,7 +124,7 @@ export function BoardPage({ id }: { id?: string }) {
   // ---- loading ----
   useEffect(() => {
     api.maps().then(setMaps).catch((e: Error) => setMsg({ text: e.message, error: true }));
-    api.team().then((d) => setRoster(d.team.members.map((m) => m.nick))).catch(() => {});
+    api.teamPlayers().then((players) => setRoster(players.map((p) => p.nick))).catch(() => {});
   }, []);
 
   const open = useCallback((b: Board, saved: boolean) => {

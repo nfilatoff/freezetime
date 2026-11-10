@@ -47,7 +47,7 @@ export function dossierMarkdown(report: ScoutReport, q: ScoutQuery, notes: Note[
     out.push(`## ${t("notes.title")}`, "");
     for (const n of [...ours].sort((a, b) => a.match.localeCompare(b.match) || a.round - b.round || a.sec - b.sec)) {
       const at = n.sec < 0 ? `-${Math.round(-n.sec)}` : String(Math.round(n.sec));
-      out.push(`- ${t("notes.mdLine", { round: n.round, sec: at, author: n.author_nick || t("notes.analyst") })} ${n.text.replace(/\n+/g, " ")} (${n.match})`);
+      out.push(`- ${t("notes.mdLine", { round: n.round, sec: at })} ${n.text.replace(/\n+/g, " ")} (${n.match})`);
     }
     out.push("");
   }

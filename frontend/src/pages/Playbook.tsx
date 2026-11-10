@@ -1,29 +1,27 @@
 import { useEffect, useState } from "react";
 import { api, recordingUrl, type BoardSummary, type LibraryMatch, type MatchOverview, type PlaybookAttachment,
   type PlaybookBook, type PlaybookDraft, type PlaybookEntry, type PlaybookTask, type Playlist, type PrivatePlaybook,
-  type StrategyStats, type TeamMember } from "../api";
+  type StrategyStats } from "../api";
 import { download } from "../clipExport";
 import { mapPretty } from "../components/MatchPicker";
 import { ReplayView } from "../components/Replay";
-import { WhoAmI } from "../components/TeamShare";
 import { t } from "../i18n";
 import { nadeLabel } from "../components/InsightCards";
-import { attachmentLink, playbookText, playbookXlsx } from "../playbookExport";
+import { attachmentLink, playbookText, playbookXlsx, slotLabel } from "../playbookExport";
 import { go } from "../router";
-import { copyText, useSession } from "../session";
+import { copyText } from "../share";
 
 const blank = (): PlaybookDraft => ({ name: "", kind: "strategy", map: "", side: "", category: "", pinned: false,
-  description: "", steps: [], tasks: {}, attachments: [], detector: null });
+  description: "", steps: [], tasks: [], attachments: [], detector: null });
+const MAX_TASKS = 10;
 const KINDS = ["strategy", "protocol", "setup"] as const;
 const ATTACHMENTS = ["board", "round", "playlist", "recording", "url"] as const;
 const sideName = (side: string) => side === "terrorist" ? "T" : side === "counter-terrorist" ? "CT" : t("pb.anySide");
 
 export function PlaybookPage({ id }: { id?: string }) {
-  const session = useSession();
   const [data, setData] = useState<PrivatePlaybook | null>(null);
-  const [roster, setRoster] = useState<TeamMember[]>([]);
+  const [nicks, setNicks] = useState<string[]>([]);
   const [bookId, setBookId] = useState("");
-  const [mine, setMine] = useState(false);
   const [search, setSearch] = useState("");
   const [map, setMap] = useState("");
   const [kind, setKind] = useState("");
@@ -36,7 +34,7 @@ export function PlaybookPage({ id }: { id?: string }) {
   const reload = async () => { setData(await api.playbook()); setRevision((r) => r + 1); };
   useEffect(() => {
     reload().catch((e: Error) => setError(e.message));
-    api.team().then((d) => setRoster(d.team.members)).catch((e: Error) => setError(e.message));
+    api.teamPlayers().then((players) => setNicks(players.map((p) => p.nick))).catch(() => {});
   }, []);
   const run = async (work: () => Promise<unknown>) => {
     setBusy(true); setError("");
@@ -45,15 +43,14 @@ export function PlaybookPage({ id }: { id?: string }) {
   const book = data?.books.find((b) => b.id === bookId);
   const order = book?.entries ?? data?.entries.map((e) => e.id) ?? [];
   const entries = (data?.entries ?? []).filter((e) => order.includes(e.id) && (!map || e.map === map) && (!kind || e.kind === kind) &&
-    (!category || e.category === category) && (!mine || (!!session?.member && !!e.tasks[session.member.id])) &&
+    (!category || e.category === category) &&
     (!search || `${e.name} ${e.description} ${e.category}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())))
     .sort((a, b) => Number(b.pinned) - Number(a.pinned) || order.indexOf(a.id) - order.indexOf(b.id));
   const selected = data?.entries.find((e) => e.id === id);
   const name = book?.name ?? t("pb.title");
-  const ownId = mine ? session?.member?.id : undefined;
   const exportFile = (format: "txt" | "md" | "xlsx") => {
     const safe = name.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").slice(0, 100);
-    download(format === "xlsx" ? playbookXlsx(entries, roster, ownId) : new Blob([playbookText(name, entries, roster, ownId, format === "md")],
+    download(format === "xlsx" ? playbookXlsx(entries) : new Blob([playbookText(name, entries, format === "md")],
       { type: "text/plain;charset=utf-8" }), `${safe}.${format}`);
   };
   const saveBook = (b: Pick<PlaybookBook, "name" | "entries">, existing?: string) => run(async () => {
@@ -68,25 +65,22 @@ export function PlaybookPage({ id }: { id?: string }) {
 
   return <div className="page playbook-page">
     <div className="pagehead screen-only"><h1>{t("pb.title")}</h1><div className="sub">{t("pb.sub")}</div></div>
-    <div className="screen-only"><WhoAmI /></div>
     {error && <div className="error">{error}</div>}
     <div className="pb-layout screen-only">
       <aside className="pb-side">
         <button className={!bookId ? "on" : ""} onClick={() => setBookId("")}>{t("pb.all")}</button>
         <h3>{t("pb.books")}</h3>
         {data?.books.map((b) => <button className={bookId === b.id ? "on" : ""} key={b.id} onClick={() => setBookId(b.id)}>{b.name} <span className="muted">{b.entries.length}</span></button>)}
-        {session?.can_edit && <form onSubmit={(e) => { e.preventDefault(); saveBook({ name: bookName, entries: [] }); }}>
+        <form onSubmit={(e) => { e.preventDefault(); saveBook({ name: bookName, entries: [] }); }}>
           <input aria-label={t("pb.bookName")} placeholder={t("pb.bookName")} maxLength={120} value={bookName} onChange={(e) => setBookName(e.target.value)} />
           <button disabled={busy || !bookName.trim()}>{t("pb.createBook")}</button>
-        </form>}
-        <label><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> {t("pb.mine")}</label>
-        {mine && !session?.member && <p className="muted small">{t("pb.chooseIdentity")}</p>}
+        </form>
       </aside>
       <div className="pb-main">
         <div className="row">
           <h2>{name}</h2>
-          {session?.can_edit && <button disabled={busy} onClick={() => go("playbook", "new")}>{t("pb.create")}</button>}
-          {book && session?.can_edit && <>
+          <button disabled={busy} onClick={() => go("playbook", "new")}>{t("pb.create")}</button>
+          {book && <>
             <button disabled={busy} onClick={() => { const n = window.prompt(t("pb.bookName"), book.name); if (n?.trim()) saveBook({ ...book, name: n }, book.id); }}>{t("pb.rename")}</button>
             <button disabled={busy} onClick={() => window.confirm(t("pb.deleteBookConfirm", { name: book.name })) && run(async () => { await api.deletePlaybookItem("books", book.id); setBookId(""); })}>{t("common.delete")}</button>
           </>}
@@ -109,11 +103,11 @@ export function PlaybookPage({ id }: { id?: string }) {
           <button disabled={!entries.length} onClick={() => window.print()}>{t("pb.pdf")}</button>
         </div>
         <div className="pb-entries">
-          {entries.map((e) => <div key={e.id} className={`pb-entry ${e.id === id ? "on" : ""}`} draggable={!!book && !!session?.can_edit && !busy}
+          {entries.map((e) => <div key={e.id} className={`pb-entry ${e.id === id ? "on" : ""}`} draggable={!!book && !busy}
             onDragStart={(event) => { setDragging(e.id); event.dataTransfer.effectAllowed = "move"; }} onDragOver={(event) => { if (dragging) event.preventDefault(); }}
             onDrop={(event) => { event.preventDefault(); if (dragging) move(dragging, e.id); setDragging(null); }} onDragEnd={() => setDragging(null)}>
             <a href={`#/playbook/${e.id}`}><b>{e.pinned ? "★ " : ""}{e.name}</b><span className="small muted">{[t(`pb.kind.${e.kind}`), e.map, sideName(e.side), e.category].filter(Boolean).join(" · ")}</span></a>
-            {book && session?.can_edit && <span className="pb-order">
+            {book && <span className="pb-order">
               <button className="small-btn" title={t("pb.moveUp")} disabled={busy || book.entries.indexOf(e.id) === 0}
                 onClick={() => move(e.id, book.entries[book.entries.indexOf(e.id) - 1])}>↑</button>
               <button className="small-btn" title={t("pb.removeFromBook")} disabled={busy}
@@ -122,34 +116,32 @@ export function PlaybookPage({ id }: { id?: string }) {
           </div>)}
           {data && !entries.length && <p className="muted">{t("pb.empty")}</p>}
         </div>
-        {id === "new" && session?.can_edit ? <EntryEditor key={`new-${revision}`} roster={roster} books={data?.books ?? []} initialBook={bookId}
+        {id === "new" ? <EntryEditor key={`new-${revision}`} nicks={nicks} books={data?.books ?? []} initialBook={bookId}
           onSaved={async (entry) => { await reload(); go("playbook", entry.id); }} /> : selected ?
-          <EntryCard key={`${selected.id}-${revision}`} entry={selected} roster={roster} books={data?.books ?? []} mine={ownId} mineMode={mine}
+          <EntryCard key={`${selected.id}-${revision}`} entry={selected} nicks={nicks} books={data?.books ?? []}
             onChanged={reload} onDeleted={() => { reload().catch((e: Error) => setError(e.message)); go("playbook"); }} /> :
           <p className="muted">{!data ? t("common.loading") : id ? t("pb.notFound") : t("pb.pick")}</p>}
       </div>
     </div>
-    <div className="print-only pb-print"><h1>{name}</h1>{entries.map((e) => <article key={e.id}><h2>{e.name}</h2><EntryText entry={e} roster={roster} mine={ownId} mineMode={mine} print /></article>)}</div>
+    <div className="print-only pb-print"><h1>{name}</h1>{entries.map((e) => <article key={e.id}><h2>{e.name}</h2><EntryText entry={e} print /></article>)}</div>
   </div>;
 }
 
-function EntryCard({ entry, roster, books, mine, mineMode, onChanged, onDeleted }: {
-  entry: PlaybookEntry; roster: TeamMember[]; books: PlaybookBook[]; mine?: string; mineMode: boolean;
-  onChanged: () => Promise<void>; onDeleted: () => void;
+function EntryCard({ entry, nicks, books, onChanged, onDeleted }: {
+  entry: PlaybookEntry; nicks: string[]; books: PlaybookBook[]; onChanged: () => Promise<void>; onDeleted: () => void;
 }) {
-  const session = useSession();
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
   const [stats, setStats] = useState<StrategyStats | null>(null);
   useEffect(() => { api.playbookStats(entry.id).then(setStats).catch((e: Error) => setError(e.message)); }, [entry.id]);
-  if (editing) return <EntryEditor entry={entry} roster={roster} books={books} onCancel={() => setEditing(false)} onSaved={async () => { await onChanged(); setEditing(false); }} />;
+  if (editing) return <EntryEditor entry={entry} nicks={nicks} books={books} onCancel={() => setEditing(false)} onSaved={async () => { await onChanged(); setEditing(false); }} />;
   return <article className="pb-card">
-    <div className="row"><h2>{entry.name}</h2>{session?.can_edit && <>
+    <div className="row"><h2>{entry.name}</h2>
       <button onClick={() => setEditing(true)}>{t("pb.edit")}</button>
       <button onClick={() => window.confirm(t("pb.deleteEntryConfirm", { name: entry.name })) && api.deletePlaybookItem("entries", entry.id).then(onDeleted).catch((e: Error) => setError(e.message))}>{t("common.delete")}</button>
-    </>}</div>
+    </div>
     {error && <div className="error">{error}</div>}
-    <EntryText entry={entry} roster={roster} mine={mine} mineMode={mineMode} />
+    <EntryText entry={entry} />
     {entry.detector && <div className="pb-stats">
       <h3>{t("pb.stats")}</h3><p className="muted small">{t("pb.statsHint")}</p>
       {!stats ? t("common.loading") : !stats.available ? t("pb.statsUnavailable") : <>
@@ -161,21 +153,20 @@ function EntryCard({ entry, roster, books, mine, mineMode, onChanged, onDeleted 
   </article>;
 }
 
-function EntryText({ entry, roster, mine, mineMode, print = false }: { entry: PlaybookEntry; roster: TeamMember[]; mine?: string; mineMode: boolean; print?: boolean }) {
+function EntryText({ entry, print = false }: { entry: PlaybookEntry; print?: boolean }) {
   return <>
     <div className="muted small">{[t(`pb.kind.${entry.kind}`), entry.map, sideName(entry.side), entry.category].filter(Boolean).join(" · ")}</div>
     <p className="pb-prose">{entry.description}</p>
     {!!entry.steps.length && <><h3>{t("pb.steps")}</h3><ol>{entry.steps.map((s, i) => <li className="pb-prose" key={i}>{s}</li>)}</ol></>}
-    <h3>{mineMode ? t("pb.mine") : t("pb.tasks")}</h3>
-    {Object.entries(entry.tasks).filter(([id]) => !mineMode || mine === id).map(([id, task]) => <section className="pb-task" key={id}>
-      <h4>{roster.find((m) => m.id === id)?.nick ?? id}</h4><p className="pb-prose">{task.text}</p>
+    {!!entry.tasks.length && <h3>{t("pb.tasks")}</h3>}
+    {entry.tasks.map((task, k) => <section className="pb-task" key={k}>
+      <h4>{slotLabel(task, k)}</h4><p className="pb-prose">{task.text}</p>
       {task.utility.map((u, i) => <div className="pb-utility" key={i}>
         <b>{u.label || nadeLabel(u.type)}</b><code>{u.commands}</code>
         {!print && <CopyCommand value={u.commands} />}
         <a href={attachmentLink({ kind: "round", label: "", ...u.source })}>{t("pb.sourceThrow")}</a>
       </div>)}
     </section>)}
-    {mineMode && (!mine || !entry.tasks[mine]) && <p className="muted">{t("pb.noTask")}</p>}
     {!!entry.attachments.length && <><h3>{t("pb.attachments")}</h3>{entry.attachments.map((a, i) => print ?
       <p key={i}>{a.label || t(`pb.attachment.${a.kind}`)}: {attachmentLink(a)}</p> : <Attachment key={i} attachment={a} />)}</>}
   </>;
@@ -183,7 +174,7 @@ function EntryText({ entry, roster, mine, mineMode, print = false }: { entry: Pl
 
 function CopyCommand({ value }: { value: string }) {
   const [done, setDone] = useState(false);
-  return <button className="small-btn" onClick={async () => { const ok = await copyText(value); setDone(ok); if (!ok) window.prompt(t("pb.copy"), value); }}>{done ? t("team.copied") : t("pb.copy")}</button>;
+  return <button className="small-btn" onClick={async () => { const ok = await copyText(value); setDone(ok); if (!ok) window.prompt(t("pb.copy"), value); }}>{done ? t("pb.copied") : t("pb.copy")}</button>;
 }
 
 function Attachment({ attachment: a }: { attachment: PlaybookAttachment }) {
@@ -224,7 +215,7 @@ function InlinePlaylist({ id }: { id: string }) {
   </>}</div>;
 }
 
-function EntryEditor({ entry, roster, books, initialBook, onSaved, onCancel }: { entry?: PlaybookEntry; roster: TeamMember[]; books: PlaybookBook[]; initialBook?: string;
+function EntryEditor({ entry, nicks, books, initialBook, onSaved, onCancel }: { entry?: PlaybookEntry; nicks: string[]; books: PlaybookBook[]; initialBook?: string;
   onSaved: (entry: PlaybookEntry) => Promise<void>; onCancel?: () => void }) {
   const [draft, setDraft] = useState<PlaybookDraft>(entry ?? blank);
   const [membership, setMembership] = useState<string[]>(entry ? books.filter((b) => b.entries.includes(entry.id)).map((b) => b.id) : initialBook ? [initialBook] : []);
@@ -234,7 +225,7 @@ function EntryEditor({ entry, roster, books, initialBook, onSaved, onCancel }: {
   const [maps, setMaps] = useState<string[]>([]);
   useEffect(() => { api.maps().then(setMaps).catch((e: Error) => setError(e.message)); }, []);
   const edit = (patch: Partial<PlaybookDraft>) => setDraft((d) => ({ ...d, ...patch }));
-  const task = (id: string, value: PlaybookTask) => edit({ tasks: { ...draft.tasks, [id]: value } });
+  const task = (k: number, value: PlaybookTask) => edit({ tasks: draft.tasks.map((v, i) => (i === k ? value : v)) });
   const dirty = JSON.stringify(draft) !== JSON.stringify(entry ?? blank()) || JSON.stringify([...membership].sort()) !==
     JSON.stringify(books.filter((b) => entry && b.entries.includes(entry.id)).map((b) => b.id).sort());
   useEffect(() => {
@@ -252,7 +243,7 @@ function EntryEditor({ entry, roster, books, initialBook, onSaved, onCancel }: {
     setBusy(true); setError("");
     try {
       const saved = await api.savePlaybookEntry(draft, savedId); setSavedId(saved.id);
-      // Read current books so edits by another staff member are not replaced by an old snapshot.
+      // Read current books so a change made in another tab is not replaced by an old snapshot.
       const current = await api.playbook();
       for (const b of current.books) {
         const contains = b.entries.includes(saved.id), wanted = membership.includes(b.id);
@@ -282,22 +273,26 @@ function EntryEditor({ entry, roster, books, initialBook, onSaved, onCancel }: {
         <button title={t("common.delete")} onClick={() => edit({ steps: draft.steps.filter((_, k) => k !== i) })}>✕</button></div>)}
       <button disabled={draft.steps.length >= 50} onClick={() => edit({ steps: [...draft.steps, ""] })}>{t("pb.addStep")}</button>
       <h3>{t("pb.tasks")}</h3>
-      {Object.entries(draft.tasks).map(([id, value]) => <div className="pb-task" key={id}>
-        <div className="row"><h4>{roster.find((m) => m.id === id)?.nick ?? id}</h4><button onClick={() => { const next = { ...draft.tasks }; delete next[id]; edit({ tasks: next }); }}>{t("common.delete")}</button></div>
-        <textarea aria-label={t("pb.taskText")} rows={3} maxLength={4000} value={value.text} onChange={(e) => task(id, { ...value, text: e.target.value })} />
-        {value.utility.map((u, i) => <div className="pb-utility" key={i}><b>{u.label || nadeLabel(u.type)}</b><code>{u.commands}</code><button className="small-btn" title={t("common.delete")} onClick={() => task(id, { ...value, utility: value.utility.filter((_, k) => i !== k) })}>✕</button></div>)}
-        <UtilityImport member={roster.find((m) => m.id === id)} attachments={draft.attachments} onCopy={(utility) => {
+      {draft.tasks.map((value, k) => <div className="pb-task" key={k}>
+        <div className="row">
+          <input list="pb-nicks" aria-label={t("pb.slot")} placeholder={t("pb.slotPlaceholder", { n: k + 1 })} maxLength={40} value={value.slot}
+            onChange={(e) => task(k, { ...value, slot: e.target.value })} />
+          <button onClick={() => edit({ tasks: draft.tasks.filter((_, i) => i !== k) })}>{t("common.delete")}</button>
+        </div>
+        <textarea aria-label={t("pb.taskText")} rows={3} maxLength={4000} value={value.text} onChange={(e) => task(k, { ...value, text: e.target.value })} />
+        {value.utility.map((u, i) => <div className="pb-utility" key={i}><b>{u.label || nadeLabel(u.type)}</b><code>{u.commands}</code><button className="small-btn" title={t("common.delete")} onClick={() => task(k, { ...value, utility: value.utility.filter((_, j) => i !== j) })}>✕</button></div>)}
+        <UtilityImport slot={value.slot} attachments={draft.attachments} onCopy={(utility) => {
           setDraft((current) => {
-            const latest = current.tasks[id];
+            const latest = current.tasks[k];
             if (!latest) return current;
             const bySource = new Map([...latest.utility, ...utility].map((u) => [`${u.source.match}-${u.source.round}-${u.source.steamid}-${u.source.start}`, u]));
-            return { ...current, tasks: { ...current.tasks, [id]: { ...latest, utility: [...bySource.values()] } } };
+            return { ...current, tasks: current.tasks.map((v, i) => (i === k ? { ...latest, utility: [...bySource.values()] } : v)) };
           });
         }} />
       </div>)}
-      <select aria-label={t("pb.addTask")} value="" onChange={(e) => { if (e.target.value) task(e.target.value, { text: "", utility: [] }); }}><option value="">{t("pb.addTask")}</option>
-        {roster.filter((m) => !draft.tasks[m.id]).map((m) => <option key={m.id} value={m.id}>{m.nick}</option>)}</select>
-      {!roster.length && <p className="muted small">{t("pb.rosterHint")}</p>}
+      <datalist id="pb-nicks">{nicks.map((n) => <option key={n} value={n} />)}</datalist>
+      <button disabled={draft.tasks.length >= MAX_TASKS} onClick={() => edit({ tasks: [...draft.tasks, { slot: "", text: "", utility: [] }] })}>{t("pb.addTask")}</button>
+      <p className="muted small">{t("pb.slotHint")}</p>
       <h3>{t("pb.attachments")}</h3>
       {draft.attachments.map((a, i) => <div className="row" key={i}><a href={attachmentLink(a)}>{a.label || t(`pb.attachment.${a.kind}`)}</a>
         <button title={t("common.delete")} onClick={() => edit({ attachments: draft.attachments.filter((_, k) => i !== k) })}>✕</button></div>)}
@@ -309,7 +304,8 @@ function EntryEditor({ entry, roster, books, initialBook, onSaved, onCancel }: {
   </section>;
 }
 
-function UtilityImport({ member, attachments, onCopy }: { member?: TeamMember; attachments: PlaybookAttachment[]; onCopy: (utility: PlaybookTask["utility"]) => void }) {
+/** Copy a demo player's real throws into a task; the player whose demo name is the slot is picked first. */
+function UtilityImport({ slot, attachments, onCopy }: { slot: string; attachments: PlaybookAttachment[]; onCopy: (utility: PlaybookTask["utility"]) => void }) {
   const rounds = attachments.filter((a): a is Extract<PlaybookAttachment, { kind: "round" }> => a.kind === "round");
   const [index, setIndex] = useState("");
   const [players, setPlayers] = useState<{ id: string; name: string }[]>([]);
@@ -323,15 +319,16 @@ function UtilityImport({ member, attachments, onCopy }: { member?: TeamMember; a
     if (round) api.throws(round.match).then((d) => {
       if (!active) return;
       const found = [...new Map(d.throws.filter((u) => u.round_num === round.round).map((u) => [u.steamid, { id: u.steamid, name: u.name }])).values()];
-      setPlayers(found); setPlayer(found.find((p) => p.id === member?.steamid)?.id ?? "");
+      setPlayers(found); setPlayer(found.find((p) => p.name.toLocaleLowerCase() === slot.trim().toLocaleLowerCase())?.id ?? "");
     }).catch((e: Error) => { if (active) { setMessage(e.message); setFailed(true); } });
     return () => { active = false; };
-  }, [round?.match, round?.round, member?.steamid]);
-  if (!member) return null;
+    // the slot only preselects a player when the round changes; typing in it does not reset the choice
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [round?.match, round?.round]);
   const copy = async () => {
     if (!round || !player) return;
     setBusy(true); setMessage(""); setFailed(false);
-    try { const utility = await api.copyPlaybookUtility({ match: round.match, round: round.round, start: round.start, end: round.end, steamid: player, member: member.id });
+    try { const utility = await api.copyPlaybookUtility({ match: round.match, round: round.round, start: round.start, end: round.end, steamid: player });
       onCopy(utility); setMessage(t("pb.utilityCopied", { n: utility.length }));
     } catch (e) { setMessage((e as Error).message); setFailed(true); } finally { setBusy(false); }
   };
@@ -339,7 +336,7 @@ function UtilityImport({ member, attachments, onCopy }: { member?: TeamMember; a
     <select aria-label={t("pb.sourceRound")} value={index} onChange={(e) => setIndex(e.target.value)}><option value="">{t("pb.sourceRound")}</option>
       {rounds.map((a, i) => <option key={i} value={i}>{a.label || `${a.match} · ${t("pl.round", { round: a.round })}`}</option>)}</select>
     <select aria-label={t("pb.demoPlayer")} value={player} onChange={(e) => setPlayer(e.target.value)}><option value="">{t("pb.demoPlayer")}</option>{players.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
-    <span>→ {member.nick}</span><button disabled={!round || !player || busy} onClick={copy}>{t("pb.copyUtility")}</button>
+    <button disabled={!round || !player || busy} onClick={copy}>{t("pb.copyUtility")}</button>
     {message && <span className={failed ? "error" : "muted small"}>{message}</span>}
   </div>{!rounds.length && <p className="muted small">{t("pb.attachRoundFirst")}</p>}</div>;
 }

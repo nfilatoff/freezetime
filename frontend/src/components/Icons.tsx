@@ -28,9 +28,6 @@ export const IconScout = () => (
 export const IconUs = () => (
   <svg {...base}><path d="M12 3l8 3v6c0 4.5-3.3 7.8-8 9-4.7-1.2-8-4.5-8-9V6z" /></svg>
 );
-export const IconTeam = () => (
-  <svg {...base}><circle cx="9" cy="8" r="3.2" /><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.900 1.900 6.500 5.500M16 5.200a3.200 3.200 0 010 5.800M18 14.800c1.900.7 3.100 2.400 3.500 5.200" /></svg>
-);
 export const IconNote = () => (
   <svg {...base}><path d="M5 3h10l4 4v14H5z" /><path d="M15 3v4h4M8 11h8M8 15h8M8 19h5" /></svg>
 );

@@ -1,19 +1,19 @@
 """Packs: a ``.zip`` to hand team work to somebody without a server.
 
-A pack holds any of: tactics boards, the team profile, notes, playlists, playbooks and whole parsed matches
+A pack holds any of: tactics boards, notes, playlists, the playbook and whole parsed matches
 (the Parquet tables, never the ``.dem``, the replay cache or recordings). Layout::
 
     freezetime-pack.json            {"format": 1, "created": ..., "boards": n, "matches": [...], ...}
     boards/<id>.json
-    team.json
     notes.json
     playlists.json
     playbook.json
     matches/<match id>/manifest.json, *.parquet, events/*.parquet, highlights.json
 
 Importing merges and never destroys: a board, note or playlist replaces the local one of the
-same id only when it is newer; a match that is already parsed stays as it is; the team profile
-is taken only while there is no local roster. A pack comes from somebody else's computer, so
+same id only when it is newer; a match that is already parsed stays as it is. Packs made while
+the app had a team profile may hold ``team.json``: it is not imported, only its nicks name the
+slots of a format 1 playbook in the same pack. A pack comes from somebody else's computer, so
 every name in it is checked against what a pack may contain before anything is written.
 """
 
@@ -31,7 +31,6 @@ from freezetime import board as boards_mod
 from freezetime import notes as notes_mod
 from freezetime import playlists as playlists_mod
 from freezetime import playbook as playbook_mod
-from freezetime.team import TeamError, load_team, save_team, team_path
 
 FORMAT = 1
 MANIFEST = "freezetime-pack.json"
@@ -54,13 +53,13 @@ def _match_dir(out: Path, match_id: str) -> Path | None:
 
 
 def export_pack(
-    out: str | Path, target: str | Path | BinaryIO, *, boards: list[str] | None = None, team: bool = False,
+    out: str | Path, target: str | Path | BinaryIO, *, boards: list[str] | None = None,
     notes: bool = False, playlists: bool = False, playbook: bool = False, matches: list[str] | tuple[str, ...] = (),
 ) -> dict:
     """Write a pack; ``boards=None`` takes every board, ``[]`` none. Returns its manifest."""
     out = Path(out)
     board_ids = [b["id"] for b in boards_mod.list_boards(out)] if boards is None else list(boards)
-    info: dict = {"format": FORMAT, "created": int(time.time()), "boards": 0, "team": False, "notes": 0, "playlists": 0, "playbook": 0, "matches": []}
+    info: dict = {"format": FORMAT, "created": int(time.time()), "boards": 0, "notes": 0, "playlists": 0, "playbook": 0, "matches": []}
     with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as z:
         for board_id in board_ids:
             b = boards_mod.load_board(out, board_id)
@@ -68,9 +67,6 @@ def export_pack(
                 raise PackError(f"no board {board_id}")
             z.writestr(f"boards/{board_id}.json", json.dumps(b, ensure_ascii=False))
             info["boards"] += 1
-        if team and team_path(out).exists():
-            z.writestr("team.json", json.dumps(load_team(out), ensure_ascii=False))
-            info["team"] = True
         if notes:
             found = notes_mod.load_notes(out)
             z.writestr("notes.json", json.dumps(found, ensure_ascii=False))
@@ -159,14 +155,7 @@ def import_pack(out: str | Path, source: str | Path | BinaryIO) -> dict:
             except boards_mod.BoardError as e:
                 raise PackError(f"{name}: {e}") from e
         if "team.json" in names:
-            if load_team(out)["members"]:
-                result["team"] = "kept"  # ours is not overwritten by somebody's copy
-            else:
-                try:
-                    save_team(out, _json(z, "team.json"))
-                except TeamError as e:
-                    raise PackError(f"team.json: {e}") from e
-                result["team"] = "added"
+            result["team"] = "skipped"  # team profiles are gone; the file only names old playbook tasks
         if "notes.json" in names:
             try:
                 result["notes"] = notes_mod.merge_notes(out, _json(z, "notes.json"))
@@ -179,7 +168,8 @@ def import_pack(out: str | Path, source: str | Path | BinaryIO) -> dict:
                 raise PackError(f"playlists.json: {e}") from e
         if "playbook.json" in names:
             try:
-                result["playbook"] = playbook_mod.merge_playbook(out, _json(z, "playbook.json"))
+                nicks = playbook_mod.roster_nicks(_json(z, "team.json")) if "team.json" in names else {}
+                result["playbook"] = playbook_mod.merge_playbook(out, _json(z, "playbook.json"), nicks)
             except playbook_mod.PlaybookError as e:
                 raise PackError(f"playbook.json: {e}") from e
 

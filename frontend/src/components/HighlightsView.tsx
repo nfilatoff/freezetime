@@ -12,7 +12,6 @@ import { useMapAssets, type MapAssets } from "../radar";
 import { loadReplay } from "../replayDraw";
 import { t } from "../i18n";
 import { RecordPanel, Recordings } from "./RecordPanel";
-import { getSession } from "../session";
 
 const KINDS = ["ace", "4k", "3k", "clutch", "double", "special", "custom"] as const;
 const SIZES = [512, 768, 1024];
@@ -331,7 +330,7 @@ export function HighlightsView({ match, round, at }: { match: MatchOverview; rou
         </div>
         {saved && <div className="small ok-text">{saved}</div>}
 
-        {getSession()?.local && <RecordPanel match={match} checked={all.filter((h) => checked.has(h.id))} onFinished={() => setRecorded((n) => n + 1)} />}
+        <RecordPanel match={match} checked={all.filter((h) => checked.has(h.id))} onFinished={() => setRecorded((n) => n + 1)} />
 
         <div ref={formRef}>
           <h3>{t("hl.create")}</h3>

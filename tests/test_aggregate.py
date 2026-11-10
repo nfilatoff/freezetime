@@ -35,3 +35,18 @@ def test_players_and_aliases(dust2_mini):
     assert (joined["kills_2"] == joined["kills"] * 2).all()
     assert joined["adr"].to_list() == pytest.approx(joined["adr_2"].to_list())
     assert out["matches"].height == 1 and isinstance(out["matches"], pl.DataFrame)
+
+
+def test_team_players_follow_aliases_and_count_matches():
+    from freezetime.aggregate import team_players
+
+    matches = [
+        {"teams": ["Alpha Esports", "Beta"], "players": [
+            {"steamid": 1, "name": "new_nick", "team": "Alpha Esports"}, {"steamid": 3, "name": "other", "team": "Beta"}]},
+        {"teams": ["Alpha", "Gamma"], "players": [
+            {"steamid": 1, "name": "old_nick", "team": "Alpha"}, {"steamid": 2, "name": "bravo", "team": "Alpha"},
+            {"steamid": None, "name": "BOT", "team": "Alpha"}]},
+    ]
+    found = team_players(matches, "Alpha", {"Alpha Esports": "Alpha"})
+    assert found == [{"steamid": "1", "nick": "new_nick", "matches": 2}, {"steamid": "2", "nick": "bravo", "matches": 1}]
+    assert team_players(matches, "Nobody", {}) == []

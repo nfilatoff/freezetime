@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { hashParts } from "./router";
-import { refreshSession, setSession, useSession } from "./session";
-import { Gate } from "./components/Gate";
 import { LibraryPage } from "./pages/Library";
 import { MatchPage } from "./pages/Match";
 import { AggregatePage } from "./pages/Aggregate";
@@ -10,13 +8,12 @@ import { HighlightsPage } from "./pages/Highlights";
 import { CalloutsPage } from "./pages/Callouts";
 import { ScoutPage } from "./pages/Scout";
 import { BoardPage } from "./pages/Board";
-import { TeamPage } from "./pages/Team";
 import { NotesPage } from "./pages/Notes";
 import { PlaylistPlayer, PlaylistsPage } from "./pages/Playlists";
 import { PlaybookPage } from "./pages/Playbook";
 import { ClipView } from "./components/ClipView";
 import { LineupsView } from "./components/LineupsView";
-import { IconBoard, IconLibrary, IconLogo, IconMap, IconScout, IconNote, IconPlaylist, IconStar, IconTeam, IconUs } from "./components/Icons";
+import { IconBoard, IconLibrary, IconLogo, IconMap, IconScout, IconNote, IconPlaylist, IconStar, IconUs } from "./components/Icons";
 import { LANGS, detectSystemLang, setLang, t, useLang, type Key, type Lang } from "./i18n";
 
 function useHash(): string[] {
@@ -33,46 +30,15 @@ export function App() {
   const [page, ...rest] = useHash();
   const lang = useLang();
   useEffect(() => detectSystemLang(() => api.system().then((s) => s.locale)), []);
-  const session = useSession();
-  const [joinFailed, setJoinFailed] = useState(false);
-  useEffect(() => {
-    // a join link carries the team token in the fragment: trade it for a cookie and drop it from the address
-    const [first, token] = hashParts();
-    if (first !== "join" || !token) {
-      refreshSession().catch(() => {});
-      return;
-    }
-    api.login({ token }).then(setSession).catch(() => {
-      setJoinFailed(true);
-      return refreshSession().catch(() => {});
-    }).finally(() => {
-      window.history.replaceState(null, "", "#/");
-      window.dispatchEvent(new HashChangeEvent("hashchange"));
-    });
-  }, []);
   const [own, setOwn] = useState<string | null>(null);
-  const allowed = !!session && !session.need;
   useEffect(() => {
-    if (allowed) api.teams().then((d) => setOwn(d.own)).catch(() => {});
-  }, [allowed]);
-  const [unread, setUnread] = useState(0);
-  useEffect(() => {
-    if (!allowed) return;
-    const check = () => api.notes({ mine: true }).then((d) => setUnread(d.unread)).catch(() => {});
-    check();
-    const timer = setInterval(check, 60_000); // teammates write from their own computers
-    window.addEventListener("freezetime:notes", check);
-    return () => {
-      clearInterval(timer);
-      window.removeEventListener("freezetime:notes", check);
-    };
-  }, [allowed, session?.member?.id]);
+    api.teams().then((d) => setOwn(d.own)).catch(() => {});
+  }, []);
   const us = own ? `scout/${encodeURIComponent(own)}` : null;
   const nav: [string, Key, typeof IconLibrary][] = [
     ["", "nav.library", IconLibrary],
     ["scout", "nav.scout", IconScout],
     ...(us ? [[us, "nav.us", IconUs] as [string, Key, typeof IconLibrary]] : []),
-    ["team", "nav.team", IconTeam],
     ["board", "nav.board", IconBoard],
     ["playbook", "nav.playbook", IconScout],
     ["notes", "nav.notes", IconNote],
@@ -86,10 +52,8 @@ export function App() {
     : page === "aggregate" || page === "clip" || page === "lineups" ? "scout"
     : page === "playlist" ? "playlists"
     : page ?? "";
-  if (!session) return null;
-  if (session.need) return <Gate session={session} joinFailed={joinFailed} />;
   return (
-    <div className={`shell ${session.local ? "" : "no-local"} ${session.can_edit ? "" : "no-edit"}`}>
+    <div className="shell">
       <aside className="sidebar">
         <a className="logo" href="#/" title="Freezetime">
           <IconLogo />
@@ -99,11 +63,9 @@ export function App() {
             <a key={key} href={`#/${key}`} className={`navitem ${active === key ? "active" : ""}`}>
               <Icon />
               {t(label)}
-              {key === "notes" && unread > 0 && <span className="nav-badge" title={t("notes.unread", { n: unread })}>{unread}</span>}
             </a>
           ))}
         </nav>
-        {session.member && <a className="whoami" href="#/team" title={t("team.you")}>{session.member.nick}</a>}
         <LangSwitch lang={lang} />
       </aside>
       <div className="content">
@@ -120,15 +82,13 @@ export function App() {
           ) : page === "board" ? (
             <BoardPage id={rest[0]} />
           ) : page === "notes" ? (
-            <NotesPage tab={rest[0]} />
+            <NotesPage />
           ) : page === "playbook" ? (
             <PlaybookPage id={rest[0]} />
           ) : page === "playlists" ? (
             <PlaylistsPage id={rest[0]} />
           ) : page === "playlist" && rest[0] ? (
             <PlaylistPlayer id={rest[0]} index={Number(rest[1] ?? 0)} />
-          ) : page === "team" ? (
-            <TeamPage onOwn={setOwn} />
           ) : page === "callouts" ? (
             <CalloutsPage map={rest[0]} />
           ) : page === "scout" ? (

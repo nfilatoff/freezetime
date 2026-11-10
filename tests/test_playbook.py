@@ -9,7 +9,7 @@ from freezetime.lineups import throws
 
 def sample(**over):
     return {"name": "B split", "map": "de_dust2", "side": "terrorist", "steps": ["Take mid", "Split B"],
-            "tasks": {"aabbccdd": {"text": "Smoke doors", "utility": []}},
+            "tasks": [{"slot": "bravo", "text": "Smoke doors", "utility": []}],
             "attachments": [{"kind": "round", "match": "dust2_mini", "round": 3, "start": 5, "end": 20}],
             "detector": {"site": "B", "core": [{"type": "smoke", "zone": "B Doors"}]}} | over
 
@@ -34,7 +34,8 @@ def test_shared_entries_order_and_delete(tmp_path):
 
 @pytest.mark.parametrize("over", [
     {"name": " "}, {"kind": "other"}, {"map": "../map"}, {"side": "ct"}, {"pinned": "yes"},
-    {"steps": ["x"] * 51}, {"tasks": {"../bad": {}}}, {"tasks": {"aabbccdd": "bad"}},
+    {"steps": ["x"] * 51}, {"tasks": {"aabbccdd": {}}}, {"tasks": ["bad"]}, {"tasks": [{"slot": 5}]},
+    {"tasks": [{"slot": "x"}] * 11},
     {"attachments": [{"kind": "round", "match": "../out", "round": 2}]},
     {"attachments": [{"kind": "round", "match": "x", "round": True}]},
     {"attachments": [{"kind": "round", "match": "x", "round": 1, "start": float("nan")}]},
@@ -108,9 +109,35 @@ def test_utility_copies_exact_throw_and_commands(dust2_mini, tmp_path):
     assert [u[k] for k in ("x", "y", "z", "pitch", "yaw")] == [actual[k] for k in ("x", "y", "z", "pitch", "yaw")]
     assert u["commands"].startswith("setpos ") and "; setang " in u["commands"]
     assert u["source"]["steamid"] == str(actual["steamid"])
-    saved = P.save_item(tmp_path, "entries", sample(tasks={"aabbccdd": {"text": "Throw", "utility": copied}}))
-    assert saved["tasks"]["aabbccdd"]["utility"] == copied
+    saved = P.save_item(tmp_path, "entries", sample(tasks=[{"slot": "bravo", "text": "Throw", "utility": copied}]))
+    assert saved["tasks"][0]["utility"] == copied
     with pytest.raises(P.PlaybookError):
-        P.save_item(tmp_path, "entries", sample(tasks={"aabbccdd": {"utility": [u | {"x": float("inf")} ]}}))
+        P.save_item(tmp_path, "entries", sample(tasks=[{"utility": [u | {"x": float("inf")}]}]))
     with pytest.raises(P.PlaybookError):
-        P.save_item(tmp_path, "entries", sample(tasks={"aabbccdd": {"utility": [u | {"weapon": []}]}}))
+        P.save_item(tmp_path, "entries", sample(tasks=[{"utility": [u | {"weapon": []}]}]))
+
+
+def format1(**tasks):
+    return {"format": 1, "books": [], "entries": [
+        {"id": "a" * 12, "name": "B split", "tasks": tasks, "created": 1, "updated": 1}]}
+
+
+def test_format1_tasks_get_slots_from_the_old_roster(tmp_path):
+    (tmp_path / P.FILE).write_text(json.dumps(format1(aabbccdd={"text": "Smoke doors"}, eeff0011={"text": "Flash"})), encoding="utf-8")
+    (tmp_path / "team.json").write_text(json.dumps({"members": [{"id": "aabbccdd", "nick": "bravo"}]}), encoding="utf-8")
+    entry = P.load_playbook(tmp_path)["entries"][0]
+    assert entry["tasks"] == [{"slot": "bravo", "text": "Smoke doors", "utility": []}, {"slot": "", "text": "Flash", "utility": []}]
+    before = (tmp_path / P.FILE).read_text(encoding="utf-8")
+    assert json.loads(before)["format"] == 1  # reading changes nothing on disk
+    P.save_item(tmp_path, "books", {"name": "Dust2", "entries": [entry["id"]]})
+    assert json.loads((tmp_path / P.FILE).read_text(encoding="utf-8"))["format"] == P.FORMAT
+    assert (tmp_path / "team.json").exists()  # the old profile is never deleted
+
+
+def test_format1_from_a_pack_uses_its_nicks(tmp_path):
+    counts = P.merge_playbook(tmp_path, format1(aabbccdd={"text": "Smoke"}), {"aabbccdd": "bravo"})
+    assert counts["added"] == 1 and P.load_playbook(tmp_path)["entries"][0]["tasks"][0]["slot"] == "bravo"
+    with pytest.raises(P.PlaybookError):
+        P.merge_playbook(tmp_path, format1(**{f"{i:08x}": {} for i in range(P.MAX_TASKS + 1)}))
+    assert P.roster_nicks({"members": [{"id": "x", "nick": "  a  b "}, {"id": "y", "nick": " "}, "bad"]}) == {"x": "a b"}
+    assert P.roster_nicks("nope") == {}

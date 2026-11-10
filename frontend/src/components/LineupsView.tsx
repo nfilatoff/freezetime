@@ -10,7 +10,6 @@ import { drawRadar, levelLabel, levelOf, sideColor, sideShort, useMapAssets, wor
 import { MatchPicker } from "./MatchPicker";
 import { t, td } from "../i18n";
 import { ConsoleSetup } from "./ConsoleSetup";
-import { getSession } from "../session";
 
 // grenade type and colour; names are nades.<type> (plural) and nade.<type> in the locales
 const TYPES: [string, string][] = [
@@ -235,7 +234,6 @@ export function LineupsView({ initial, scope }: { initial?: MatchOverview; scope
 
   // CS2 status: refreshed every few seconds (also shows the progress of an "open in CS2")
   useEffect(() => {
-    if (!getSession()?.local) return; // the game is on the analyst's computer, not a teammate's
     let alive = true;
     const poll = () => api.cs2().then((s) => alive && setStatus(s)).catch(() => {});
     poll();
@@ -367,8 +365,8 @@ export function LineupsView({ initial, scope }: { initial?: MatchOverview; scope
           <button onClick={() => download(new Blob([csv(filtered)], { type: "text/csv" }), `${exportName}_throws.csv`)} disabled={!filtered.length}>CSV</button>
           <button onClick={() => download(new Blob([JSON.stringify(jsonExport(map, filtered), null, 1)], { type: "application/json" }), `${exportName}_throws.json`)} disabled={!filtered.length}>JSON</button>
           <button onClick={() => listCfg(false)} disabled={!groups.length} title={t("lu.cfgTitle")}>.cfg</button>
-          <button className="only-local" onClick={() => listCfg(true)} disabled={!groups.length || !status?.cfg_dir}>{t("lu.install")}</button>
-          <button className="only-local" onClick={() => cs2(api.cs2RunList(map, exportName), t("lu.listWhat", { name: exportName }))} disabled={!groups.length || !status?.cfg_dir} title={t("lu.runListTitle")}>{t("lu.runList")}</button>
+          <button onClick={() => listCfg(true)} disabled={!groups.length || !status?.cfg_dir}>{t("lu.install")}</button>
+          <button onClick={() => cs2(api.cs2RunList(map, exportName), t("lu.listWhat", { name: exportName }))} disabled={!groups.length || !status?.cfg_dir} title={t("lu.runListTitle")}>{t("lu.runList")}</button>
         </div>
         <div className="muted small">{t("lu.exportHint")}</div>
 
@@ -401,7 +399,7 @@ export function LineupsView({ initial, scope }: { initial?: MatchOverview; scope
                 {" · "}{t("lu.afterFreeze", { t: fmtSec(median(selected.throws.map((th) => th.sec))) })}</span>
             </div>
             <div className="row small">
-              <button className="primary only-local" onClick={() => cs2(api.cs2Open(map, lineupOf(selected)), t("lu.lineupWhat"))}>{t("lu.open")}</button>
+              <button className="primary" onClick={() => cs2(api.cs2Open(map, lineupOf(selected)), t("lu.lineupWhat"))}>{t("lu.open")}</button>
               <button onClick={() => copy(consoleString(lineupOf(selected)), t("lu.lineupCmd"))}>{t("lu.copy")}</button>
               <code className="console">{consoleString(lineupOf(selected))}</code>
             </div>
@@ -442,7 +440,7 @@ export function LineupsView({ initial, scope }: { initial?: MatchOverview; scope
                   <td className="muted">{fmtSec(median(g.throws.map((th) => th.sec)))}</td>
                   <td className="muted">{[...new Set(g.throws.map((th) => th.name))].slice(0, 3).join(", ")}</td>
                   <td>
-                    <button className="link small only-local" title={t("lu.openTitle")} onClick={(e) => { e.stopPropagation(); cs2(api.cs2Open(map, lineupOf(g)), t("lu.lineupWhat")); }}>▶ CS2</button>
+                    <button className="link small" title={t("lu.openTitle")} onClick={(e) => { e.stopPropagation(); cs2(api.cs2Open(map, lineupOf(g)), t("lu.lineupWhat")); }}>▶ CS2</button>
                   </td>
                 </tr>
               ))}

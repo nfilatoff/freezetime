@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, radarUrl, type Job, type Library, type LibraryMatch } from "../api";
 import { go } from "../router";
 import { t } from "../i18n";
+import { Packs } from "../components/Packs";
 
 const ACCEPT = ".dem,.zip,.rar,.7z,.tar,.tgz,.gz,.bz2,.xz,.zst";
 const ARCHIVE = /\.(zip|rar|7z|tar|tgz|gz|bz2|xz|zst)$/i;
@@ -180,7 +181,7 @@ export function LibraryPage() {
             return (
               <div key={m.id} className="card clickable" onClick={() => go("match", m.id, "overview")}>
                 <button
-                  className="card-del only-edit"
+                  className="card-del"
                   title={m.busy ? t("lib.busy") : t("common.delete")}
                   disabled={m.busy}
                   onClick={(e) => {
@@ -230,7 +231,7 @@ export function LibraryPage() {
         </div>
       </section>
 
-      <section className="only-local">
+      <section>
         <h2>{t("lib.demos")} <span className="count">{demos.length}</span></h2>
         <div className="row">
           <input
@@ -363,6 +364,10 @@ export function LibraryPage() {
             )}
           </tbody>
         </table>
+      </section>
+
+      <section className="packs">
+        <Packs />
       </section>
 
       {confirmDelete && (
