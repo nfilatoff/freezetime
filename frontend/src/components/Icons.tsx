@@ -1,3 +1,5 @@
+import type { Tool } from "../board";
+
 // Outline icons for navigation (24x24, color from currentColor)
 const base = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" } as const;
 
@@ -35,3 +37,17 @@ export const IconStar = () => (
 export const IconBoard = () => (
   <svg {...base}><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8" cy="9" r="1.6" /><path d="M14 8l3 3M17 8l-3 3M8 13c1 3 4 4 8 3" /><path d="M14.5 14.5L16 16l-1.8.6" /></svg>
 );
+
+/** Pointer tools of the tactics board and of the sketch over the replay. */
+export function ToolIcon({ tool }: { tool: Tool }) {
+  const p = { viewBox: "0 0 24 24", width: 18, height: 18, fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" } as const;
+  switch (tool) {
+    case "select": return <svg {...p}><path d="M5 3l14 8-6 2-3 6z" /></svg>;
+    case "pen": return <svg {...p}><path d="M4 20l4-1 11-11-3-3L5 16zM14 6l3 3" /></svg>;
+    case "arrow": return <svg {...p}><path d="M5 19L19 5M10 5h9v9" /></svg>;
+    case "rect": return <svg {...p}><rect x="4" y="6" width="16" height="12" rx="1" /></svg>;
+    case "circle": return <svg {...p}><circle cx="12" cy="12" r="8" /></svg>;
+    case "text": return <svg {...p}><path d="M5 6V4h14v2M12 4v16M9 20h6" /></svg>;
+    case "eraser": return <svg {...p}><path d="M8 20h12M5 15l9-10 6 6-8 9H9z" /></svg>;
+  }
+}

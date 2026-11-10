@@ -1,18 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MatchOverview, Replay } from "../api";
+import type { BoardMark, BoardPos, MatchOverview, Replay } from "../api";
 import { go } from "../router";
-import { boardFromFrame, emptyBoard, stashDraft } from "../board";
+import { PEN_COLORS, PEN_WIDTHS, boardFromFrame, drawMarks, emptyBoard, hitTest, newId, startMark, stashDraft, strayMark, stretchMark } from "../board";
 import { CT_COLOR, RADAR_SIZE, T_COLOR, levelLabel, levelOf, panelLevels, sideColor, sideShort, useMapAssets, worldToPx } from "../radar";
 import {
-  BOMB_TIME, NADE_COLORS, ROUND_TIME, bombState, drawRound, fmtClock, frameAt, killAt, loadReplay, playerStates, weaponName, type PlayerState,
+  BOMB_TIME, NADE_COLORS, ROUND_TIME, bombState, drawRound, fmtClock, frameAt, killAt, loadReplay, playerStates, throwAt, weaponName, type PlayerState,
 } from "../replayDraw";
 import { useCalloutMode } from "../callouts";
-import { reasonLabel, t } from "../i18n";
+import { reasonLabel, t, type Key } from "../i18n";
 import { CalloutToggle } from "./CalloutToggle";
+import { ToolIcon } from "./Icons";
 import { KillCard } from "./KillCard";
 
 const SPEEDS = [0.25, 0.5, 1, 2, 4, 8];
 const KILLFEED_SEC = 6;
+const NOTE_MS = 3500;
+
+// Sketching over the replay: the board's marks, kept in radar px so they stay put between rounds.
+type SketchTool = "pen" | "arrow" | "eraser";
+const SKETCH_TOOLS: [SketchTool, Key][] = [["pen", "board.tool.pen"], ["arrow", "board.tool.arrow"], ["eraser", "board.tool.eraser"]];
+type Stroke = { mark: BoardMark | null; origin: [number, number]; start: BoardMark[] }; // mark null: erasing
+
+const num = (v: number) => String(Math.round(v * 10) / 10);
+/** Console line that puts you where somebody stood, looking the same way. */
+const setpos = (x: number, y: number, z: number, pitch: number, yaw: number) =>
+  `setpos ${num(x)} ${num(y)} ${num(z)}; setang ${num(pitch)} ${num(yaw)} 0`;
 
 // ---- component ----
 export function ReplayView({ match, round, at }: { match: MatchOverview; round: number; at?: number }) {
@@ -26,6 +38,16 @@ export function ReplayView({ match, round, at }: { match: MatchOverview; round: 
   const [opts, setOpts] = useState({ names: true, weapons: false, trails: true, shots: true });
   const callouts = useCalloutMode();
   const [hover, setHover] = useState<{ kill: number; x: number; y: number } | null>(null);
+  const [hoverThrow, setHoverThrow] = useState<{ g: number; x: number; y: number } | null>(null);
+  const [drawing, setDrawing] = useState(false);
+  const [tool, setTool] = useState<SketchTool>("pen");
+  const [color, setColor] = useState(PEN_COLORS[1]);
+  const [marks, setMarksState] = useState<BoardMark[]>([]);
+  const marksRef = useRef(marks);
+  const past = useRef<BoardMark[][]>([]);
+  const stroke = useRef<Stroke | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const noteTimer = useRef(0);
   const [uiTick, setUiTick] = useState(0);
   const tickRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -60,6 +82,42 @@ export function ReplayView({ match, round, at }: { match: MatchOverview; round: 
     return () => ro.disconnect();
   }, []);
 
+  // ---- sketch ----
+  const setMarks = useCallback((next: BoardMark[]) => {
+    marksRef.current = next; // erasing reads it again before the next render
+    setMarksState(next);
+  }, []);
+  const commitMarks = useCallback((next: BoardMark[], from: BoardMark[]) => {
+    if (next === from) return;
+    past.current.push(from);
+    if (past.current.length > 200) past.current.shift();
+    setMarks(next);
+  }, [setMarks]);
+  const undoMark = useCallback(() => {
+    const prev = past.current.pop();
+    if (prev) setMarks(prev);
+  }, [setMarks]);
+  const clearMarks = useCallback(() => commitMarks([], marksRef.current), [commitMarks]);
+  useEffect(() => {
+    // another map: the drawings mean nothing there
+    past.current = [];
+    setMarks([]);
+  }, [match.map, setMarks]);
+
+  const flash = useCallback((text: string) => {
+    setNote(text);
+    window.clearTimeout(noteTimer.current);
+    noteTimer.current = window.setTimeout(() => setNote(null), NOTE_MS);
+  }, []);
+  useEffect(() => () => window.clearTimeout(noteTimer.current), []);
+  const copy = useCallback(
+    (text: string) => {
+      // without clipboard access the line is still shown, to be copied by hand
+      navigator.clipboard.writeText(text).then(() => flash(t("replay.copied", { text })), () => flash(text));
+    },
+    [flash],
+  );
+
   const levels = assets ? panelLevels(assets.meta, assets.meta.levels.length > 1 ? view : 0) : [0];
   const size = Math.max(320, Math.min(Math.floor(boxWidth / levels.length), window.innerHeight - 230));
 
@@ -69,9 +127,13 @@ export function ReplayView({ match, round, at }: { match: MatchOverview; round: 
     const ctx = c.getContext("2d")!;
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawRound(ctx, assets, data, tickRef.current, levels, size, { ...opts, callouts: callouts !== "off", hoverKill: hover?.kill ?? -1 });
+    drawRound(ctx, assets, data, tickRef.current, levels, size, {
+      ...opts, callouts: callouts !== "off", hoverKill: hover?.kill ?? -1, throwPoints: true, hoverThrow: hoverThrow?.g ?? -1,
+    });
+    const draft = stroke.current?.mark;
+    drawMarks(ctx, assets.meta, draft ? [...marksRef.current, draft] : marksRef.current, levels, size);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assets, data, size, levels.join(","), opts, callouts, hover?.kill]);
+  }, [assets, data, size, levels.join(","), opts, callouts, hover?.kill, hoverThrow?.g, marks]);
 
   useEffect(render, [render, uiTick]);
 
@@ -128,25 +190,80 @@ export function ReplayView({ match, round, at }: { match: MatchOverview; round: 
     [data, seek],
   );
 
-  // death crosses under the pointer
+  // death crosses and throw points under the pointer
   const onStageMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!assets || !data) return;
+    if (!assets || !data || drawing) return;
     const box = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - box.left, y = e.clientY - box.top;
     const panel = Math.floor(x / size);
     const li = levels[panel];
-    if (li === undefined) return setHover(null);
+    if (li === undefined) {
+      setHover(null);
+      return setHoverThrow(null);
+    }
     const k = size / RADAR_SIZE;
     const multi = assets.meta.levels.length > 1;
-    const i = killAt(data.kills, tickRef.current, (wx, wy) => worldToPx(assets.meta, wx, wy), (x - panel * size) / k, y / k, 1 / k,
-      (kill) => !multi || levelOf(assets.meta, kill.vz) === li);
+    const P = (wx: number, wy: number) => worldToPx(assets.meta, wx, wy);
+    const i = killAt(data.kills, tickRef.current, P, (x - panel * size) / k, y / k, 1 / k, (kill) => !multi || levelOf(assets.meta, kill.vz) === li);
     setHover(i >= 0 ? { kill: i, x, y } : null);
+    const g = i >= 0 ? -1 : throwAt(data, tickRef.current, P, (x - panel * size) / k, y / k, 1 / k, (z) => !multi || levelOf(assets.meta, z) === li);
+    setHoverThrow(g >= 0 ? { g, x, y } : null);
   };
   const onStageClick = () => {
-    if (!hover || !data) return;
+    if (drawing || !data) return;
+    const thrown = hoverThrow && data.grenades[hoverThrow.g]?.throw;
+    if (thrown) return copy(setpos(thrown.x, thrown.y, thrown.z, thrown.pitch, thrown.yaw));
+    if (!hover) return;
     const kill = data.kills[hover.kill];
     setPlaying(false);
     seek(Math.min(kill.duel_start ?? kill.tick, kill.tick - data.tick_rate) - data.tick_rate);
+  };
+
+  // ---- drawing with the pointer ----
+  const locate = (e: React.PointerEvent<HTMLDivElement>): BoardPos | null => {
+    const box = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - box.left, y = e.clientY - box.top;
+    const panel = Math.floor(x / size);
+    if (panel < 0 || panel >= levels.length || y < 0 || y > size) return null;
+    const k = size / RADAR_SIZE;
+    return { x: (x - panel * size) / k, y: y / k, l: levels[panel] };
+  };
+  const eraseAt = (p: BoardPos) => {
+    if (!assets) return;
+    const h = hitTest({ ...emptyBoard(match.map), marks: marksRef.current }, assets.meta, 0, p.l, p.x, p.y, 8 * (RADAR_SIZE / size), null);
+    if (h) setMarks(marksRef.current.filter((m) => m.id !== h.id));
+  };
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!drawing || (e.button !== 0 && e.button !== 2)) return;
+    const p = locate(e);
+    if (!p) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    if (e.button === 2 || tool === "eraser") {
+      stroke.current = { mark: null, origin: [p.x, p.y], start: marksRef.current };
+      eraseAt(p);
+    } else {
+      stroke.current = { mark: startMark(tool, 0, p, color, PEN_WIDTHS[1]), origin: [p.x, p.y], start: marksRef.current };
+      render();
+    }
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const st = stroke.current;
+    const p = st && locate(e);
+    if (!st || !p) return;
+    if (!st.mark) return eraseAt(p);
+    if (p.l !== st.mark.l) return;
+    stretchMark(st.mark, st.origin, p.x, p.y, e.shiftKey);
+    render();
+  };
+  const onPointerUp = () => {
+    const st = stroke.current;
+    stroke.current = null;
+    if (!st) return;
+    if (!st.mark) {
+      // erased marks are already gone; one undo step brings them all back
+      if (marksRef.current !== st.start) past.current.push(st.start);
+    } else if (strayMark(st.mark)) render();
+    else commitMarks([...marksRef.current, st.mark], st.start);
   };
 
   const changeSpeed = (dir: number) =>
@@ -157,6 +274,29 @@ export function ReplayView({ match, round, at }: { match: MatchOverview; round: 
     const onKey = (e: KeyboardEvent) => {
       if (!data || (e.target as HTMLElement).tagName === "INPUT" || (e.target as HTMLElement).tagName === "SELECT") return;
       const sec = data.tick_rate;
+      const key = e.key.toLowerCase();
+      if (e.ctrlKey || e.metaKey) {
+        if (key === "z" && drawing) {
+          e.preventDefault();
+          undoMark();
+        }
+        return;
+      }
+      if (key === "d") {
+        e.preventDefault();
+        return setDrawing((d) => !d);
+      }
+      if (drawing) {
+        // while drawing, 1/2/3 pick a tool instead of a level
+        const picked = SKETCH_TOOLS[["1", "2", "3"].indexOf(e.key)]?.[0];
+        if (picked || key === "c" || e.key === "Escape") {
+          e.preventDefault();
+          if (picked) setTool(picked);
+          else if (key === "c") clearMarks();
+          else setDrawing(false);
+          return;
+        }
+      }
       switch (e.key) {
         case " ": setPlaying((p) => !p); break;
         case "ArrowRight": e.shiftKey ? seek(tickRef.current + 5 * sec) : stepFrame(1); break;
@@ -180,9 +320,11 @@ export function ReplayView({ match, round, at }: { match: MatchOverview; round: 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, seek, stepFrame, jumpKill, roundIdx, assets]);
+  }, [data, seek, stepFrame, jumpKill, roundIdx, assets, drawing, undoMark, clearMarks]);
 
   const states = useMemo(() => (data ? playerStates(data, uiTick) : []), [data, uiTick]);
+  const copyPlayer = (s: PlayerState) => copy(setpos(s.x, s.y, s.z, 0, s.yaw ?? 0));
+  const thrower = hoverThrow && data ? data.players.find((p) => p.steamid === data.grenades[hoverThrow.g]?.thrower)?.name : undefined;
   if (error) return <div className="error">{error}</div>;
   if (mapError) return <div className="error">{mapError}</div>;
 
@@ -221,24 +363,39 @@ export function ReplayView({ match, round, at }: { match: MatchOverview; round: 
       </div>
 
       <div className="replay-body">
-        <TeamPanel states={states.filter((s) => s.p.side === "counter-terrorist")} title={data?.teams["counter-terrorist"] ?? "CT"} color={CT_COLOR} />
+        <TeamPanel states={states.filter((s) => s.p.side === "counter-terrorist")} title={data?.teams["counter-terrorist"] ?? "CT"} color={CT_COLOR} onCopy={copyPlayer} />
         <div className="replay-stage" ref={boxRef}>
           {!data || !assets ? (
             <div className="muted" style={{ height: size }}>{t("replay.loadingRound")}</div>
           ) : (
             <div
-              style={{ position: "relative", width, height: size, cursor: hover ? "pointer" : undefined }}
+              className={drawing ? "replay-canvas drawing" : "replay-canvas"}
+              style={{ position: "relative", width, height: size, cursor: drawing ? undefined : hover || hoverThrow ? "pointer" : undefined }}
               onMouseMove={onStageMove}
-              onMouseLeave={() => setHover(null)}
+              onMouseLeave={() => {
+                setHover(null);
+                setHoverThrow(null);
+              }}
               onClick={onStageClick}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+              onContextMenu={(e) => drawing && e.preventDefault()}
             >
               <canvas ref={canvasRef} width={width * dpr} height={size * dpr} style={{ width, height: size }} />
               <KillFeed r={data} tick={uiTick} />
               {hover && data.kills[hover.kill] && <KillCard r={data} kill={data.kills[hover.kill]} x={hover.x} y={hover.y} maxX={width} />}
+              {hoverThrow && (
+                <div className="replay-tip" style={{ left: Math.min(hoverThrow.x + 12, width - 230), top: hoverThrow.y + 14 }}>
+                  {thrower ? `${thrower} · ` : ""}{t("replay.throwTip")}
+                </div>
+              )}
+              {note && <div className="replay-note">{note}</div>}
             </div>
           )}
         </div>
-        <TeamPanel states={states.filter((s) => s.p.side === "terrorist")} title={data?.teams.terrorist ?? "T"} color={T_COLOR} />
+        <TeamPanel states={states.filter((s) => s.p.side === "terrorist")} title={data?.teams.terrorist ?? "T"} color={T_COLOR} onCopy={copyPlayer} />
       </div>
 
       {data && (
@@ -268,7 +425,9 @@ export function ReplayView({ match, round, at }: { match: MatchOverview; round: 
                 if (!assets) return;
                 setPlaying(false);
                 const sec = Math.round(((tickRef.current - data.freeze_end_tick) / data.tick_rate) * 10) / 10;
-                stashDraft(boardFromFrame(assets.meta, data, tickRef.current, { match: match.id, round, sec }));
+                const board = boardFromFrame(assets.meta, data, tickRef.current, { match: match.id, round, sec });
+                board.marks.push(...marks.map((m) => ({ ...m, id: newId() }))); // the sketch comes along
+                stashDraft(board);
                 go("board", "draft");
               }}
             >
@@ -285,9 +444,31 @@ export function ReplayView({ match, round, at }: { match: MatchOverview; round: 
             >
               {t("replay.openBoard")}
             </button>
+            <span className="sketch">
+              <button className={drawing ? "on" : ""} title={t("replay.drawTitle")} onClick={() => setDrawing((d) => !d)}>{t("replay.draw")}</button>
+              {drawing && (
+                <>
+                  <span className="seg">
+                    {SKETCH_TOOLS.map(([k, label], i) => (
+                      <button key={k} className={tool === k ? "on" : ""} title={`${t(label)} (${i + 1})`} onClick={() => setTool(k)}>
+                        <ToolIcon tool={k} />
+                      </button>
+                    ))}
+                  </span>
+                  <span className="board-colors">
+                    {PEN_COLORS.map((c) => (
+                      <button key={c} className={color === c ? "on" : ""} style={{ background: c }} onClick={() => { setColor(c); if (tool === "eraser") setTool("pen"); }} />
+                    ))}
+                  </span>
+                  <button disabled={!past.current.length} title="Ctrl+Z" onClick={undoMark}>{t("board.undo")}</button>
+                  <button disabled={!marks.length} title={t("replay.drawClearTitle")} onClick={clearMarks}>{t("board.clear")}</button>
+                </>
+              )}
+            </span>
             <span className="muted small hotkeys">
               {t("replay.hotkeys")}
               {assets && assets.meta.levels.length > 1 ? t("replay.hotkeysLevels") : ""}
+              {t("replay.hotkeysDraw")}
             </span>
           </div>
           {roundInfo && (
@@ -313,12 +494,17 @@ function Clock({ r, tick }: { r: Replay; tick: number }) {
   return <span className="clock">{fmtClock(ROUND_TIME - (tick - r.freeze_end_tick) / r.tick_rate)}</span>;
 }
 
-function TeamPanel({ states, title, color }: { states: PlayerState[]; title: string; color: string }) {
+function TeamPanel({ states, title, color, onCopy }: { states: PlayerState[]; title: string; color: string; onCopy: (s: PlayerState) => void }) {
   return (
     <div className="team-panel">
       <div className="team-title" style={{ color }}>{title}</div>
       {states.map((s) => (
-        <div key={s.p.steamid} className={`pl ${s.hp <= 0 ? "dead" : ""}`}>
+        <div
+          key={s.p.steamid}
+          className={`pl ${s.hp <= 0 ? "dead" : "copy"}`}
+          title={s.hp > 0 ? t("replay.copyPos", { name: s.p.name }) : undefined}
+          onClick={() => s.hp > 0 && !Number.isNaN(s.x) && onCopy(s)}
+        >
           <div className="pl-top">
             <span className="pl-name">{s.p.name}</span>
             <span className="pl-icons">

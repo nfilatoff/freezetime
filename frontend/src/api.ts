@@ -370,6 +370,8 @@ export interface ReplayGrenade {
   type: string;
   thrower: string | null;
   side: Side | null;
+  /** The release: the thrower's feet position and view angles (for `setpos` / `setang`). */
+  throw: { x: number; y: number; z: number; pitch: number; yaw: number } | null;
   t: number[];
   x: number[];
   y: number[];

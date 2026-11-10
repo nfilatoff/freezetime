@@ -248,7 +248,9 @@ What's on the map:
 - **Player** — a circle in the side's color, an HP bar, a name. View cone: a gradient, bright edges and a white crosshair line. With the "weapons" checkbox (off by default so the icon isn't cluttered), the active weapon and colored equipment dots are shown under the icon: smoke (gray), flash (white), HE (red), molotov/incendiary (orange), decoy, bomb (red square), kit (green square); a grenade in hand is outlined in white. A red outline means the player has the bomb, a yellow flash means they're shooting.
 - **Shot** — a tracer from the shooter: if the bullet hit, the line goes to the wounded player and ends with a red dot; if not, a ~900-unit ray along the view direction with an arrow that fades toward the end. The "shots" checkbox.
 - **Death spot** — a cross in the victim side's color. On hover a duel card is shown (who, whom, with what, headshot/wallbang/through smoke/blinded, damage and hits in both directions, killer HP, victim weapon, distance, duration, assist, trades), and on the map — the killer's position and the shot line. A click rewinds to the start of the duel.
-- Side panels — HP, armor, money, weapons (active one highlighted) and grenades of every player.
+- Side panels — HP, armor, money, weapons (active one highlighted) and grenades of every player. Clicking a living player's card copies `setpos x y z; setang 0 yaw 0` for the current moment: paste it into the CS2 console on your own server to stand where they stood. The view pitch isn't in the replay frames, so it is 0.
+- **Throw point** — a ring in the grenade's color where the thrower stood, shown while the grenade flies and for 6 s after the throw. Hovering shows who threw it, a click copies `setpos` / `setang` with the real pitch and yaw of the throw (the grenade's `weapon_fire`).
+- **Drawing** — "✎ Draw" (or D) turns the map into a whiteboard: pencil, arrow (Shift snaps to 45°) and eraser, five colors, undo and clear. The right mouse button erases. Drawings stay in place between rounds of the match, are not saved to disk, and go along with "⧉ To board". While drawing, clicks on death spots and throw points are off.
 
 Replay controls:
 
@@ -262,6 +264,9 @@ Replay controls:
 | [ / ] | previous/next round |
 | Home | end of freeze time |
 | 1 / 2 / 3 | upper / lower / both levels (on Nuke) |
+| D | drawing on/off |
+| 1 / 2 / 3 while drawing | pencil / arrow / eraser |
+| Ctrl + Z, C, Esc while drawing | undo, clear, stop drawing |
 
 The link `#/match/<match>/replay/<round>/<second>` opens a round at the given moment.
 
@@ -323,7 +328,7 @@ The "Board" page (`#/board`, `freezetime/board.py`, `frontend/src/board.ts`, `pa
 - **Hotkeys** — V select, P pencil, A arrow, R rectangle, C ellipse, T text, E eraser, Space play, O previous step, Q/W step back/forward, 1–4 steps, Ctrl+Z / Ctrl+Shift+Z undo/redo, Del delete. The tool keys can be rebound in "Hotkeys" and are remembered in the browser.
 - **Saving** — "Save" writes `out/boards/<id>.json` (format version inside), "Update" overwrites the loaded tactic, "Save as new" makes a copy. The list on the right shows the tactics of the map (or all maps). An unsaved board survives a page reload.
 - **Export** — PNG of the current step or of all steps in a grid with a caption, GIF or MP4 of the playback (good for Discord).
-- **From the replay** — "⧉ To board" in the replay copies the current moment to step 1: alive players with names and sides, smokes, fires and the bomb. "Board" opens an empty board of the same map. Both remember the moment, and "◀ Back to replay" returns to the same round and second.
+- **From the replay** — "⧉ To board" in the replay copies the current moment to step 1: alive players with names and sides, smokes, fires, the bomb and whatever you drew over the replay. "Board" opens an empty board of the same map. Both remember the moment, and "◀ Back to replay" returns to the same round and second.
 
 ### App: opponent (dossier)
 
@@ -429,7 +434,7 @@ A point is looked up among the polygons of its level (by `z`). If zones overlap,
 - **Parsing progress.** awpy doesn't report progress inside parsing, so it's shown by stages. The first stage ("parsing demo") is the longest.
 - **Sites built from demos are based on player positions**, so the edge of the plant zone can be off by up to ~40 units. Sites where T players rarely stand come out smaller than they really are.
 - **Cache and Nuke aren't validated on demos**: names and borders of auxiliary zones may be inaccurate.
-- **Grenade thrower in the replay** — the closest alive player to the first point of the trajectory (up to 120 units). Throws right next to a teammate can be mixed up. This also decides which grenades end up in a player's clip.
+- **Grenade thrower in the replay** — the closest alive player to the first point of the trajectory (up to 120 units). Throws right next to a teammate can be mixed up. This also decides which grenades end up in a player's clip. The throw point is paired separately: the grenade's `weapon_fire` of the same type at most 32 ticks before the trajectory starts and within 160 units of its first point; a grenade without such an event has no throw point.
 - **A miss tracer** doesn't know about walls: a fixed-length ray shows the shot direction, not where the bullet hit. A hit tracer is exact (up to the wounded player).
 - **Inventory** comes from snapshots at a 0.5 s step: a thrown grenade may disappear from the icon with a delay of up to 0.5 s.
 - **`rar` and `7z`** are extracted with the system `tar.exe` (bsdtar). Without it (Windows older than 10, Linux without `bsdtar`), such archives won't upload — extract them manually or use `zip`.

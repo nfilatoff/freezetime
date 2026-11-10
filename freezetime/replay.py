@@ -1,7 +1,8 @@
 """Compact per-round replay data for the app's 2D replay.
 
 One round becomes a JSON document with a shared tick grid and per-player arrays
-(``x``, ``y``, ``z``, ``yaw``, ``hp``, ...), inventory changes, grenade trajectories, smokes
+(``x``, ``y``, ``z``, ``yaw``, ``hp``, ...), inventory changes, grenade trajectories (with the
+thrower's position and view angles at the release, for ``setpos``), smokes
 and fires with their real lifetimes, blinds, kills with duel details, bomb events and shots
 with their direction and hit point. Documents are cached gzipped in
 ``<extract>/replay/round_<n>.v<FORMAT>.json.gz``.
@@ -20,8 +21,9 @@ from pathlib import Path
 import polars as pl
 
 from freezetime.context import Match, load_match
+from freezetime.lineups import MATCH_DIST, MATCH_TICKS, WEAPON_TYPE
 
-FORMAT = 4  # bump when the document changes; old cache files are then ignored
+FORMAT = 5  # bump when the document changes; old cache files are then ignored
 PRE_FREEZE_SEC = 20.0  # replay starts at most this long before freeze end
 POST_END_SEC = 4.0  # and runs this long after the round end (capped by the official end)
 GRENADE_STEP = 2  # keep every n-th tick of grenade trajectories
@@ -205,10 +207,22 @@ def _areas(df: pl.DataFrame, start: int, end: int) -> list[dict]:
 
 
 def _grenades(m: Match, start: int, end: int, frames: pl.DataFrame) -> list[dict]:
-    """Flight paths per grenade entity; the thrower is the nearest player to the first point."""
+    """Flight paths per grenade entity; the thrower is the nearest player to the first point.
+
+    ``throw`` is the release (the grenade's ``weapon_fire``): feet position and view angles, or None
+    when no release of that type happened close enough just before the path starts.
+    """
     g = _in(m.data["grenades"], "tick", start, end).sort("tick")
     if g.is_empty():
         return []
+    releases = [
+        {**r, "type": WEAPON_TYPE[r["weapon"]]}
+        for r in _in(m.data["shots"], "tick", start - MATCH_TICKS, end)
+        .filter(pl.col("weapon").is_in(list(WEAPON_TYPE)))
+        .select("tick", "steamid", "x", "y", "z", "pitch", "yaw", "weapon")
+        .iter_rows(named=True)
+    ]
+    used: set[int] = set()
     paths = (
         g.group_by("entity_id", "entity_serial", maintain_order=True)
         .agg(
@@ -235,10 +249,26 @@ def _grenades(m: Match, start: int, end: int, frames: pl.DataFrame) -> list[dict
             ).sort("d")
             if near.height and near["d"][0] <= THROWER_RADIUS:
                 thrower, side = str(near["steamid"][0]), near["side"][0]
+        throw = None
+        kind = "molotov" if r["type"] == "incendiary" else r["type"]
+        near_releases = [
+            (((c["x"] - r["fx"]) ** 2 + (c["y"] - r["fy"]) ** 2) ** 0.5, i)
+            for i, c in enumerate(releases)
+            if i not in used and c["type"] == kind and r["first_tick"] - MATCH_TICKS <= c["tick"] <= r["first_tick"]
+        ]
+        if near_releases and min(near_releases)[0] <= MATCH_DIST:
+            i = min(near_releases)[1]
+            used.add(i)
+            c = releases[i]
+            throw = {"x": round(c["x"], 1), "y": round(c["y"], 1), "z": round(c["z"], 1),
+                     "pitch": round(c["pitch"], 2), "yaw": round(c["yaw"], 2)}
+            if thrower is None:
+                thrower = str(c["steamid"])
         out.append({
             "type": r["type"],
             "thrower": thrower,
             "side": side,
+            "throw": throw,
             "t": r["t"],
             "x": [round(v) for v in r["x"]],
             "y": [round(v) for v in r["y"]],

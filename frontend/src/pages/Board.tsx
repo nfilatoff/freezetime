@@ -2,14 +2,15 @@
 // Players, the bomb and grenades are dragged from the toolbar onto the map; strokes and
 // shapes use a tool. Dragging a player on a later step records the route it walks.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, type Board, type BoardMark, type BoardPos, type BoardSummary, type MarkType, type NadeKind } from "../api";
+import { api, type Board, type BoardMark, type BoardPos, type BoardSummary, type NadeKind } from "../api";
 import {
   MAX_STEPS, NADES, STEP_KEYS, NADE_SHORT, PEN_COLORS, PEN_WIDTHS, TOKEN_R, animDuration, animFrame, clearRoute, drawBoard, drawCaption,
-  emptyBoard, hitTest, moveToken, newId, newPlayer, newToken, posAt, removeItem, setSteps, simplify, stepName, takeDraft,
-  updateMark, updateToken,
+  emptyBoard, hitTest, moveToken, newId, newPlayer, newToken, posAt, removeItem, setSteps, simplify, startMark, stepName, strayMark,
+  stretchMark, takeDraft, updateMark, updateToken, type Tool,
 } from "../board";
 import { canEncodeVideo, download, exportGif, exportMp4 } from "../clipExport";
 import { CalloutToggle } from "../components/CalloutToggle";
+import { ToolIcon } from "../components/Icons";
 import { mapPretty } from "../components/MatchPicker";
 import { useCalloutMode } from "../callouts";
 import { t, type Key } from "../i18n";
@@ -17,7 +18,6 @@ import { RADAR_SIZE, levelLabel, panelLevels, useMapAssets, CT_COLOR, T_COLOR } 
 import { NADE_COLORS } from "../replayDraw";
 import { go } from "../router";
 
-type Tool = "select" | "pen" | "arrow" | "rect" | "circle" | "text" | "eraser";
 const TOOLS: [Tool, Key][] = [
   ["select", "board.tool.select"], ["pen", "board.tool.pen"], ["arrow", "board.tool.arrow"], ["rect", "board.tool.rect"],
   ["circle", "board.tool.circle"], ["text", "board.tool.text"], ["eraser", "board.tool.eraser"],
@@ -305,10 +305,7 @@ export function BoardPage({ id }: { id?: string }) {
       requestAnimationFrame(() => setEdit({ target: { kind: "mark", id: null }, l: p.l, x: p.x, y: p.y, value: "" }));
       return;
     }
-    const type: MarkType = tool;
-    const mark: BoardMark = { id: newId(), type, step, l: p.l, pts: [[p.x, p.y], [p.x, p.y]], color, width };
-    if (type === "pen") mark.pts = [[p.x, p.y]];
-    drag.current = { kind: "draw", start: board, mark, origin: [p.x, p.y], shift: e.shiftKey };
+    drag.current = { kind: "draw", start: board, mark: startMark(tool, step, p, color, width), origin: [p.x, p.y], shift: e.shiftKey };
     render();
   };
 
@@ -347,27 +344,7 @@ export function BoardPage({ id }: { id?: string }) {
         break;
       case "draw": {
         if (p.l !== d.mark.l) return;
-        const m = d.mark;
-        if (m.type === "pen") {
-          const lastPt = m.pts[m.pts.length - 1];
-          if (Math.hypot(p.x - lastPt[0], p.y - lastPt[1]) >= 2) m.pts = [...m.pts, [p.x, p.y]];
-        } else {
-          let [x, y] = [p.x, p.y];
-          const [ox, oy] = d.origin;
-          if (e.shiftKey && (m.type === "rect" || m.type === "circle")) {
-            // a square or a circle
-            const s = Math.max(Math.abs(x - ox), Math.abs(y - oy));
-            x = ox + Math.sign(x - ox || 1) * s;
-            y = oy + Math.sign(y - oy || 1) * s;
-          } else if (e.shiftKey && m.type === "arrow") {
-            // snap to 45 degrees
-            const ang = Math.round(Math.atan2(y - oy, x - ox) / (Math.PI / 4)) * (Math.PI / 4);
-            const len = Math.hypot(x - ox, y - oy);
-            x = ox + Math.cos(ang) * len;
-            y = oy + Math.sin(ang) * len;
-          }
-          m.pts = [[ox, oy], [x, y]];
-        }
+        stretchMark(d.mark, d.origin, p.x, p.y, e.shiftKey);
         render();
         break;
       }
@@ -380,10 +357,8 @@ export function BoardPage({ id }: { id?: string }) {
     const b = boardRef.current;
     if (!d || !b) return;
     if (d.kind === "draw") {
-      const m = d.mark;
-      const [a, z] = [m.pts[0], m.pts[m.pts.length - 1]];
-      if (m.type !== "pen" && Math.hypot(z[0] - a[0], z[1] - a[1]) < 6) return render();
-      commit({ ...b, marks: [...b.marks, m] }, d.start);
+      if (strayMark(d.mark)) return render();
+      commit({ ...b, marks: [...b.marks, d.mark] }, d.start);
       return;
     }
     commit(b, d.start);
@@ -933,17 +908,4 @@ export function BoardPage({ id }: { id?: string }) {
       </div>
     </div>
   );
-}
-
-function ToolIcon({ tool }: { tool: Tool }) {
-  const p = { viewBox: "0 0 24 24", width: 18, height: 18, fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" } as const;
-  switch (tool) {
-    case "select": return <svg {...p}><path d="M5 3l14 8-6 2-3 6z" /></svg>;
-    case "pen": return <svg {...p}><path d="M4 20l4-1 11-11-3-3L5 16zM14 6l3 3" /></svg>;
-    case "arrow": return <svg {...p}><path d="M5 19L19 5M10 5h9v9" /></svg>;
-    case "rect": return <svg {...p}><rect x="4" y="6" width="16" height="12" rx="1" /></svg>;
-    case "circle": return <svg {...p}><circle cx="12" cy="12" r="8" /></svg>;
-    case "text": return <svg {...p}><path d="M5 6V4h14v2M12 4v16M9 20h6" /></svg>;
-    case "eraser": return <svg {...p}><path d="M8 20h12M5 15l9-10 6 6-8 9H9z" /></svg>;
-  }
 }

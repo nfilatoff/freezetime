@@ -288,6 +288,17 @@ tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .controls .play, .clip-main .play { min-width: 48px; font-size: 16px; background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .controls .play:hover:not(:disabled), .clip-main .play:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
 .hotkeys { margin-left: 10px; }
+.replay-canvas.drawing { cursor: crosshair; touch-action: none; user-select: none; }
+.sketch { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.sketch > button.on { border-color: var(--accent); color: var(--accent); }
+.sketch .seg button { padding: 5px 8px; display: inline-flex; align-items: center; }
+.pl.copy { cursor: copy; }
+.pl.copy:hover { border-color: var(--line2); }
+.replay-note, .replay-tip {
+  position: absolute; z-index: 6; pointer-events: none; padding: 5px 10px; font-size: 12px;
+  background: rgba(16, 16, 16, 0.94); border: 1px solid var(--line2); border-radius: 6px; white-space: nowrap;
+}
+.replay-note { left: 50%; bottom: 10px; transform: translateX(-50%); max-width: 92%; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, Consolas, monospace; }
 
 /* ---------- Kill card ---------- */
 .kill-card {

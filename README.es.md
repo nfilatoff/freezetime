@@ -248,7 +248,9 @@ Qué hay en el mapa:
 - **Jugador** — un círculo del color del lado, barra de HP, nombre. Cono de visión: degradado, bordes brillantes y línea blanca de mira. Con la casilla «armas» (desactivada por defecto para no recargar el icono), debajo del icono aparecen el arma activa y puntos de colores del equipamiento: humo (gris), flash (blanco), HE (rojo), molotov/incendiaria (naranja), señuelo, bomba (cuadrado rojo), kit (cuadrado verde); la granada en la mano va rodeada de blanco. Borde rojo: el jugador lleva la bomba; destello amarillo: está disparando.
 - **Disparo** — trazador desde el tirador: si la bala acertó, la línea llega hasta el herido y termina en un punto rojo; si no, un rayo de ~900 unidades en la dirección de la mirada con una flecha que se desvanece al final. Casilla «disparos».
 - **Lugar de la muerte** — una cruz del color del lado de la víctima. Al pasar el cursor se muestra la tarjeta del duelo (quién, a quién, con qué, headshot/a través de pared/a través de humo/cegado, daño e impactos en ambos sentidos, HP del asesino, arma de la víctima, distancia, duración, asistencia, trades) y, en el mapa, la posición del asesino y la línea del disparo. Un clic rebobina al inicio del duelo.
-- Paneles laterales — HP, armadura, dinero, armas (la activa resaltada) y granadas de cada jugador.
+- Paneles laterales — HP, armadura, dinero, armas (la activa resaltada) y granadas de cada jugador. Un clic en la tarjeta de un jugador vivo copia `setpos x y z; setang 0 yaw 0` del momento actual: pégalo en la consola de CS2 en tu propio servidor para colocarte donde estaba. La inclinación de la vista no está en los fotogramas de la repetición, así que es 0.
+- **Punto de lanzamiento** — un anillo del color de la granada donde estaba quien la lanzó; se ve mientras la granada vuela y 6 s después del lanzamiento. Al pasar el cursor se muestra quién la lanzó, y un clic copia `setpos` / `setang` con los ángulos reales del lanzamiento (el `weapon_fire` de la granada).
+- **Dibujo** — «✎ Dibujar» (o D) convierte el mapa en una pizarra: lápiz, flecha (Shift ajusta a 45°) y goma, cinco colores, deshacer y limpiar. El botón derecho del ratón borra. Los dibujos se mantienen en su sitio entre rondas de la partida, no se guardan en disco y pasan a la pizarra con «⧉ A la pizarra». Mientras se dibuja, los clics en los lugares de muerte y en los puntos de lanzamiento están desactivados.
 
 Controles de la repetición:
 
@@ -262,6 +264,9 @@ Controles de la repetición:
 | [ / ] | ronda anterior/siguiente |
 | Home | fin del freezetime |
 | 1 / 2 / 3 | nivel superior / inferior / ambos (en Nuke) |
+| D | activar/desactivar el dibujo |
+| 1 / 2 / 3 al dibujar | lápiz / flecha / goma |
+| Ctrl + Z, C, Esc al dibujar | deshacer, limpiar, dejar de dibujar |
 
 El enlace `#/match/<partida>/replay/<ronda>/<segundo>` abre la ronda en el momento indicado.
 
@@ -323,7 +328,7 @@ La página «Pizarra» (`#/board`, `freezetime/board.py`, `frontend/src/board.ts
 - **Atajos** — V seleccionar, P lápiz, A flecha, R rectángulo, C elipse, T texto, E borrador, Espacio reproducir, O paso anterior, Q/W paso atrás/adelante, 1–4 pasos, Ctrl+Z / Ctrl+Shift+Z deshacer/rehacer, Supr borrar. Las teclas de herramientas se reasignan en «Atajos» y se recuerdan en el navegador.
 - **Guardar** — «Guardar» escribe `out/boards/<id>.json` (con la versión del formato), «Actualizar» sobrescribe la táctica cargada, «Guardar como nueva» hace una copia. La lista de la derecha muestra las tácticas del mapa (o de todos). Una pizarra sin guardar sobrevive a recargar la página.
 - **Exportación** — PNG del paso actual o de todos los pasos en cuadrícula con título, GIF o MP4 de la reproducción (práctico para Discord).
-- **Desde la repetición** — «⧉ A la pizarra» copia el momento actual al paso 1: jugadores vivos con nombres y bandos, humos, fuegos y la bomba. «Pizarra» abre una pizarra vacía del mismo mapa. Ambos recuerdan el momento, y «◀ Volver a la repetición» regresa a la misma ronda y segundo.
+- **Desde la repetición** — «⧉ A la pizarra» copia el momento actual al paso 1: jugadores vivos con nombres y bandos, humos, fuegos, la bomba y lo que hayas dibujado sobre la repetición. «Pizarra» abre una pizarra vacía del mismo mapa. Ambos recuerdan el momento, y «◀ Volver a la repetición» regresa a la misma ronda y segundo.
 
 ### Aplicación: rival (dosier)
 
@@ -429,7 +434,7 @@ Un punto se busca entre los polígonos de su nivel (por `z`). Si las zonas se so
 - **Progreso del análisis.** awpy no informa del progreso dentro del análisis, así que se muestra por etapas. La primera etapa («parsing demo») es la más larga.
 - **Los sitios creados a partir de demos se basan en las posiciones de los jugadores**, así que el borde de la zona de plantado puede desviarse hasta ~40 unidades. Los sitios donde los T casi no se colocan salen más pequeños de lo que son.
 - **Cache y Nuke no están verificados con demos**: puede haber imprecisiones en nombres y límites de zonas auxiliares.
-- **Quién lanzó la granada en la repetición** — el jugador vivo más cercano al primer punto de la trayectoria (hasta 120 unidades). Con lanzamientos pegados a un compañero puede haber confusión. Esto también decide qué granadas entran en el clip de un jugador.
+- **Quién lanzó la granada en la repetición** — el jugador vivo más cercano al primer punto de la trayectoria (hasta 120 unidades). Con lanzamientos pegados a un compañero puede haber confusión. Esto también decide qué granadas entran en el clip de un jugador. El punto de lanzamiento se empareja aparte: el `weapon_fire` de una granada del mismo tipo como mucho 32 ticks antes del inicio de la trayectoria y a menos de 160 unidades de su primer punto; una granada sin ese evento no tiene punto de lanzamiento.
 - **El trazador de un fallo** no sabe de paredes: un rayo de longitud fija muestra la dirección del disparo, no dónde dio la bala. El trazador de un acierto es exacto (hasta el herido).
 - **El inventario** sale de instantáneas con paso de 0,5 s: una granada lanzada puede desaparecer del icono con hasta 0,5 s de retraso.
 - **`rar` y `7z`** se extraen con el `tar.exe` del sistema (bsdtar). Si no está (Windows anterior a 10, Linux sin `bsdtar`), esos archivos no se subirán: extráelos a mano o usa `zip`.

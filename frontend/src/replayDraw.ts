@@ -451,6 +451,46 @@ export function drawGrenade(
   ctx.globalAlpha = 1;
 }
 
+export const THROW_SEC = 6; // a throw point stays this long after the release (and while the grenade flies)
+const THROW_MARK = 4.5; // its radius, screen px
+
+export const throwVisible = (g: Replay["grenades"][number], tick: number, rate: number) =>
+  !!g.throw && tick >= g.t[0] && tick <= Math.max(g.end, g.t[0] + THROW_SEC * rate);
+
+/** Where a grenade was thrown from: a ring in the grenade's colour, clickable in the replay. */
+export function drawThrowPoint(ctx: Ctx, g: Replay["grenades"][number], P: ToPx, s: number, alpha: number, highlight: boolean) {
+  if (!g.throw) return;
+  const [px, py] = P(g.throw.x, g.throw.y);
+  const r = (highlight ? THROW_MARK + 2.5 : THROW_MARK) * s;
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = (highlight ? 5 : 4) * s;
+  ctx.beginPath();
+  ctx.arc(px, py, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = highlight ? "#fff" : NADE_COLORS[g.type] ?? "#ccc";
+  ctx.lineWidth = (highlight ? 2.6 : 2) * s;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+/** Index of the grenade whose throw point is under a point (radar px), or -1. */
+export function throwAt(r: Replay, tick: number, P: ToPx, rx: number, ry: number, s: number, visible: (z: number) => boolean): number {
+  let best = -1, bestD = (THROW_MARK + 5) * s;
+  r.grenades.forEach((g, i) => {
+    if (!g.throw || !throwVisible(g, tick, r.tick_rate) || !visible(g.throw.z)) return;
+    const [px, py] = P(g.throw.x, g.throw.y);
+    const d = Math.hypot(px - rx, py - ry);
+    if (d <= bestD) {
+      best = i;
+      bestD = d;
+    }
+  });
+  return best;
+}
+
 /** A smoke cloud or a fire area, fading in and out over its lifetime. */
 export function drawArea(ctx: Ctx, kind: "smoke" | "fire", x: number, y: number, P: ToPx, scale: number, alpha: number) {
   const [px, py] = P(x, y);
@@ -472,6 +512,8 @@ export interface RoundDrawOpts {
   trails: boolean;
   shots: boolean;
   hoverKill: number; // index into r.kills, -1 for none
+  throwPoints?: boolean; // where recent grenades were thrown from
+  hoverThrow?: number; // index into r.grenades
   focus?: Set<string>; // players drawn with a ring and a bold name (highlights)
   levelLabels?: boolean; // level names in the panel corner (default true)
   callouts?: boolean; // position names over the radar, under everything else
@@ -522,6 +564,12 @@ export function drawRound(ctx: CanvasRenderingContext2D, assets: MapAssets, r: R
       if (tick < g.t[0] || tick > g.end + 0.25 * r.tick_rate) continue;
       const z = g.z[frameAt(g.t, tick)[0]];
       drawGrenade(ctx, g, tick, r.tick_rate, P, s, meta.scale, g.side ? sideColor(g.side) : NADE_COLORS[g.type] ?? "#ccc", vis(z), opts.trails);
+    }
+
+    if (opts.throwPoints) {
+      r.grenades.forEach((g, i) => {
+        if (throwVisible(g, tick, r.tick_rate)) drawThrowPoint(ctx, g, P, s, vis(g.throw!.z), i === opts.hoverThrow);
+      });
     }
 
     // death crosses; the hovered one is drawn last, with the killer and the line of fire

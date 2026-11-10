@@ -43,3 +43,17 @@ def test_inventory_shots_and_duels(dust2_mini):
         assert set(k) >= {"dist", "attacker_hp", "victim_weapon", "given", "taken", "trade", "traded"}
         if k["attacker"] and k["weapon"] not in ("hegrenade", "inferno", "molotov"):
             assert k["given"][0] >= 1 and k["given"][1] > 0
+
+
+def test_grenades_carry_the_release(dust2_mini):
+    m = load_match(dust2_mini, extra_tables=("smokes", "fires", "grenades", "blinds", "shots", "damages"))
+    doc = build_round(m, 5)
+    thrown = [g for g in doc["grenades"] if g["throw"]]
+    assert thrown and len(thrown) >= len(doc["grenades"]) // 2  # most paths find their weapon_fire
+    for g in thrown:
+        t = g["throw"]
+        assert set(t) == {"x", "y", "z", "pitch", "yaw"}
+        assert -90 <= t["pitch"] <= 90
+        # the release is where the path starts: next to the thrower
+        assert ((t["x"] - g["x"][0]) ** 2 + (t["y"] - g["y"][0]) ** 2) ** 0.5 <= 160
+    json.dumps(doc["grenades"])

@@ -2,7 +2,7 @@
 // marks (grenades, strokes, shapes, texts) on one step each. Shared by the board page, its
 // exports and the "replay frame -> board" transfer. Everything is drawn in radar pixels
 // (RADAR_SIZE per level), so a board looks the same at any canvas size.
-import type { Board, BoardMark, BoardPos, BoardToken, MapMeta, NadeKind, Replay } from "./api";
+import type { Board, BoardMark, BoardPos, BoardToken, MapMeta, MarkType, NadeKind, Replay } from "./api";
 import { drawCallouts } from "./callouts";
 import { t, type Key } from "./i18n";
 import { CT_COLOR, RADAR_SIZE, T_COLOR, drawRadar, levelLabel, levelOf, worldToPx, type MapAssets } from "./radar";
@@ -16,6 +16,8 @@ export const NADE_RADIUS: Record<NadeKind, number> = {
   smoke: SMOKE_RADIUS, molotov: FIRE_RADIUS, incendiary: FIRE_RADIUS, flashbang: 120, he: 200, decoy: 40,
 };
 export const NADE_SHORT: Record<NadeKind, string> = { smoke: "S", molotov: "M", incendiary: "I", flashbang: "F", he: "HE", decoy: "D" };
+/** Pointer tools of the board; the sketch over the replay uses pen, arrow and eraser. */
+export type Tool = "select" | "pen" | "arrow" | "rect" | "circle" | "text" | "eraser";
 export const PEN_COLORS = ["#ffffff", "#ff4d4f", "#f2c94c", "#3ddc84", "#5aa9ff"];
 export const PEN_WIDTHS = [3, 5, 9]; // radar px
 export const TOKEN_R = 13; // radar px
@@ -191,6 +193,41 @@ export function hitTest(b: Board, meta: MapMeta, step: number, l: number, x: num
     if (m.step === step && m.l === l && markDist(m, x, y, meta) <= tol + (m.width ?? 3) / 2) return { kind: "mark", id: m.id };
   }
   return null;
+}
+
+// ---- drawing a mark with the pointer (the board and the sketch over the replay) ----
+
+/** A mark started at a point: a stroke of one point, or a shape still of zero size. */
+export function startMark(type: MarkType, step: number, at: BoardPos, color: string, width: number): BoardMark {
+  const pts: [number, number][] = type === "pen" ? [[at.x, at.y]] : [[at.x, at.y], [at.x, at.y]];
+  return { id: newId(), type, step, l: at.l, pts, color, width };
+}
+
+/** Pull the mark being drawn to the pointer. Shift makes a square or a circle and snaps an arrow to 45°. */
+export function stretchMark(m: BoardMark, origin: [number, number], x: number, y: number, shift: boolean) {
+  if (m.type === "pen") {
+    const last = m.pts[m.pts.length - 1];
+    if (Math.hypot(x - last[0], y - last[1]) >= 2) m.pts = [...m.pts, [x, y]];
+    return;
+  }
+  const [ox, oy] = origin;
+  if (shift && (m.type === "rect" || m.type === "circle")) {
+    const s = Math.max(Math.abs(x - ox), Math.abs(y - oy));
+    x = ox + Math.sign(x - ox || 1) * s;
+    y = oy + Math.sign(y - oy || 1) * s;
+  } else if (shift && m.type === "arrow") {
+    const ang = Math.round(Math.atan2(y - oy, x - ox) / (Math.PI / 4)) * (Math.PI / 4);
+    const len = Math.hypot(x - ox, y - oy);
+    x = ox + Math.cos(ang) * len;
+    y = oy + Math.sin(ang) * len;
+  }
+  m.pts = [[ox, oy], [x, y]];
+}
+
+/** A shape too small to be meant: a click without a drag. A stroke of one point is a dot and stays. */
+export function strayMark(m: BoardMark): boolean {
+  const [a, z] = [m.pts[0], m.pts[m.pts.length - 1]];
+  return m.type !== "pen" && Math.hypot(z[0] - a[0], z[1] - a[1]) < 6;
 }
 
 /** Where the throw-point handle of a grenade is: its throw point, or a spot beside it when it has none. */
@@ -507,6 +544,21 @@ export function drawBoard(ctx: Ctx, assets: MapAssets, b: Board, o: BoardDrawOpt
       ctx.textBaseline = "alphabetic";
       ctx.fillText(levelLabel(meta, li), ox + 10, oy + 20);
     }
+  });
+}
+
+/** Loose marks over something already drawn (the sketch over the replay): the same panels as `drawBoard`. */
+export function drawMarks(ctx: Ctx, meta: MapMeta, marks: BoardMark[], levels: number[], size: number) {
+  const k = size / RADAR_SIZE;
+  levels.forEach((li, panel) => {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(panel * size, 0, size, size);
+    ctx.clip();
+    ctx.translate(panel * size, 0);
+    ctx.scale(k, k);
+    for (const m of marks) if (m.l === li) drawMark(ctx, m, meta, 1);
+    ctx.restore();
   });
 }
 
