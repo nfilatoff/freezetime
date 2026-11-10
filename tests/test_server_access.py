@@ -23,7 +23,8 @@ def call(app, method: str, path: str, client: str = REMOTE, cookies: dict | None
         headers.append((b"cookie", "; ".join(f"{k}={v}" for k, v in cookies.items()).encode()))
     scope = {
         "type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": method, "scheme": "http",
-        "path": path, "raw_path": path.encode(), "query_string": b"", "root_path": "", "headers": headers,
+        "path": path.split("?")[0], "raw_path": path.split("?")[0].encode(), "query_string": path.partition("?")[2].encode(),
+        "root_path": "", "headers": headers,
         "client": (client, 50000), "server": ("test", 80),
     }
     sent: list[dict] = []
@@ -150,3 +151,37 @@ def test_a_pack_goes_out_and_comes_back(out, tmp_path_factory):
     assert call(create_app(other), "GET", "/api/teams", LOCAL)[1]["own"] == "Us"
     assert call(create_app(other), "PUT", "/api/pack/import", LOCAL, body=b"not a zip") == (400, {"detail": "not a zip file"}, {})
     assert left() == before  # the temporary files are gone, also on Windows
+
+
+def test_notes_and_playlists_on_the_team_server(out):
+    app = create_app(out, team=True)
+    token = call(app, "GET", "/api/session", LOCAL)[1]["share"]["token"]
+    bravo = {A.TOKEN_COOKIE: token, A.MEMBER_COOKIE: member(out, "bravo")}
+    coach = {A.TOKEN_COOKIE: token, A.MEMBER_COOKIE: member(out, "coach")}
+
+    # the coach mentions bravo; the author comes from the session, not from the body
+    status, note, _ = call(app, "POST", "/api/notes", cookies=coach,
+                           body={"note": {"match": "dust2_mini", "round": 3, "sec": 10, "text": "@bravo watch this", "author": member(out, "bravo")}})
+    assert status == 200 and note["author_nick"] == "coach" and note["mentions"] == [member(out, "bravo")]
+    assert call(app, "POST", "/api/notes", cookies=coach, body={"note": {"match": "nope", "round": 1, "text": "x"}})[0] == 404
+    status, mine, _ = call(app, "GET", "/api/notes?mine=true", cookies=bravo)
+    assert [n["id"] for n in mine["notes"]] == [note["id"]] and mine["unread"] == 1
+    assert call(app, "POST", "/api/notes/read", cookies=bravo, body={"ids": [note["id"]]})[1] == {"unread": 0}
+
+    # a player may not change the coach's note, but writes and deletes their own
+    assert call(app, "DELETE", f"/api/notes/{note['id']}", cookies=bravo) == (403, {"detail": "access_owner"}, {})
+    own = call(app, "POST", "/api/notes", cookies=bravo, body={"note": {"match": "dust2_mini", "round": 4, "sec": 1, "text": "mine"}})[1]
+    assert call(app, "PUT", f"/api/notes/{own['id']}", cookies=bravo, body={"text": "changed"})[1]["text"] == "changed"
+    assert call(app, "DELETE", f"/api/notes/{own['id']}", cookies=bravo)[0] == 200
+    assert call(app, "DELETE", f"/api/notes/{note['id']}", LOCAL)[0] == 200  # the analyst may
+
+    # playlists: the owner and staff change them
+    status, pl, _ = call(app, "POST", "/api/playlists", cookies=bravo, body={"playlist": {"name": "mine", "items": []}})
+    assert status == 200 and pl["owner_nick"] == "bravo"
+    item = {"item": {"match": "dust2_mini", "round": 2, "start": 3, "end": 9, "caption": "x"}}
+    assert len(call(app, "POST", f"/api/playlists/{pl['id']}/items", cookies=bravo, body=item)[1]["items"]) == 1
+    assert call(app, "POST", f"/api/playlists/{pl['id']}/items", cookies=bravo, body={"item": {"match": "nope", "round": 1}})[0] == 404
+    theirs = call(app, "POST", "/api/playlists", cookies=coach, body={"playlist": {"name": "coach's", "items": []}})[1]
+    assert call(app, "DELETE", f"/api/playlists/{theirs['id']}", cookies=bravo) == (403, {"detail": "access_owner"}, {})
+    assert call(app, "PUT", f"/api/playlists/{pl['id']}", cookies=coach, body={"playlist": {"name": "renamed", "items": []}})[1]["owner_nick"] == "bravo"
+    assert sorted(p["name"] for p in call(app, "GET", "/api/playlists", cookies=bravo)[1]["list"]) == ["coach's", "renamed"]

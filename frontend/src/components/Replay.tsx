@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { BoardMark, BoardPos, MatchOverview, Replay } from "../api";
+import { api, type BoardMark, type BoardPos, type MatchOverview, type Note, type Replay } from "../api";
 import { go } from "../router";
 import { PEN_COLORS, PEN_WIDTHS, boardFromFrame, drawMarks, emptyBoard, hitTest, newId, startMark, stashDraft, strayMark, stretchMark } from "../board";
 import { CT_COLOR, RADAR_SIZE, T_COLOR, levelLabel, levelOf, panelLevels, sideColor, sideShort, useMapAssets, worldToPx } from "../radar";
@@ -12,6 +12,7 @@ import { CalloutToggle } from "./CalloutToggle";
 import { ToolIcon } from "./Icons";
 import { KillCard } from "./KillCard";
 import { shareUrl } from "../session";
+import { NoteForm, RoundNotes, StarForm } from "./ReplayExtras";
 
 const SPEEDS = [0.25, 0.5, 1, 2, 4, 8];
 const KILLFEED_SEC = 6;
@@ -28,7 +29,14 @@ const setpos = (x: number, y: number, z: number, pitch: number, yaw: number) =>
   `setpos ${num(x)} ${num(y)} ${num(z)}; setang ${num(pitch)} ${num(yaw)} 0`;
 
 // ---- component ----
-export function ReplayView({ match, round, at }: { match: MatchOverview; round: number; at?: number }) {
+export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
+  match: MatchOverview;
+  round: number;
+  at?: number;
+  until?: number | null; // stop here (seconds after the freeze end) and call onEnd: playlist playback
+  onEnd?: () => void;
+  autoplay?: boolean;
+}) {
   const { assets, error: mapError } = useMapAssets(match.map);
   const [data, setData] = useState<Replay | null>(null);
   const [loadMs, setLoadMs] = useState<number | null>(null);
@@ -48,6 +56,15 @@ export function ReplayView({ match, round, at }: { match: MatchOverview; round: 
   const past = useRef<BoardMark[][]>([]);
   const stroke = useRef<Stroke | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [panel, setPanel] = useState<"note" | "star" | null>(null);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const loadNotes = useCallback(() => {
+    api.notes({ match: match.id }).then((d) => setNotes(d.notes)).catch(() => {});
+  }, [match.id]);
+  useEffect(loadNotes, [loadNotes]);
+  const roundNotes = notes.filter((n) => n.round === round);
+  const onEndRef = useRef(onEnd);
+  onEndRef.current = onEnd;
   const noteTimer = useRef(0);
   const [uiTick, setUiTick] = useState(0);
   const tickRef = useRef(0);
@@ -68,6 +85,7 @@ export function ReplayView({ match, round, at }: { match: MatchOverview; round: 
         tickRef.current = r.freeze_end_tick + (at ?? -1) * r.tick_rate;
         setUiTick(tickRef.current);
         setData(r);
+        if (autoplay) setPlaying(true);
         const next = rounds[roundIdx + 1];
         if (next !== undefined) loadReplay(match.id, next).catch(() => {});
       })
@@ -142,12 +160,17 @@ export function ReplayView({ match, round, at }: { match: MatchOverview; round: 
   useEffect(() => {
     if (!playing || !data) return;
     let raf = 0, last = performance.now(), lastUi = 0;
+    const stop = until != null ? Math.min(data.last_tick, data.freeze_end_tick + until * data.tick_rate) : data.last_tick;
     const frame = (now: number) => {
       tickRef.current += ((now - last) / 1000) * data.tick_rate * speed;
       last = now;
-      if (tickRef.current >= data.last_tick) {
-        tickRef.current = data.last_tick;
+      if (tickRef.current >= stop) {
+        tickRef.current = stop;
         setPlaying(false);
+        render();
+        setUiTick(stop);
+        onEndRef.current?.();
+        return;
       }
       render();
       if (now - lastUi > 66) {
@@ -158,7 +181,7 @@ export function ReplayView({ match, round, at }: { match: MatchOverview; round: 
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [playing, speed, data, render]);
+  }, [playing, speed, data, render, until]);
 
   const seek = useCallback(
     (t: number) => {
@@ -401,7 +424,7 @@ export function ReplayView({ match, round, at }: { match: MatchOverview; round: 
 
       {data && (
         <>
-          <Timeline r={data} tick={uiTick} onSeek={seek} />
+          <Timeline r={data} tick={uiTick} onSeek={seek} notes={roundNotes} />
           <div className="controls">
             <button onClick={() => stepFrame(-1)} title={t("replay.prevFrame")}>⏮</button>
             <button className="play" onClick={() => setPlaying((p) => !p)} title={t("replay.space")}>{playing ? "⏸" : "▶"}</button>
@@ -445,6 +468,12 @@ export function ReplayView({ match, round, at }: { match: MatchOverview; round: 
             >
               {t("replay.openBoard")}
             </button>
+            <button className={panel === "note" ? "on" : ""} title={t("notes.addTitle")} onClick={() => { setPlaying(false); setPanel(panel === "note" ? null : "note"); }}>
+              {t("notes.add")}
+            </button>
+            <button className={panel === "star" ? "on" : ""} title={t("pl.addTitle")} onClick={() => { setPlaying(false); setPanel(panel === "star" ? null : "star"); }}>
+              {t("pl.star")}
+            </button>
             <button
               title={t("replay.copyLinkTitle")}
               onClick={() => copy(shareUrl("match", match.id, "replay", round, Math.round(((tickRef.current - data.freeze_end_tick) / data.tick_rate) * 10) / 10))}
@@ -478,6 +507,15 @@ export function ReplayView({ match, round, at }: { match: MatchOverview; round: 
               {t("replay.hotkeysDraw")}
             </span>
           </div>
+          {panel === "note" && (
+            <NoteForm match={match.id} round={round} sec={(tickRef.current - data.freeze_end_tick) / data.tick_rate}
+              onDone={(saved) => { setPanel(null); if (saved) loadNotes(); }} />
+          )}
+          {panel === "star" && (
+            <StarForm match={match.id} round={round} sec={(tickRef.current - data.freeze_end_tick) / data.tick_rate}
+              onDone={(msg) => { setPanel(null); if (msg) flash(msg); }} />
+          )}
+          <RoundNotes notes={roundNotes} onChanged={loadNotes} onSeek={(sec) => { setPlaying(false); seek(data.freeze_end_tick + sec * data.tick_rate); }} />
           {roundInfo && (
             <div className="muted small">
               {t("replay.won", { winner: roundInfo.winner, side: sideShort(roundInfo.winner_side), reason: reasonLabel(roundInfo.reason) })}
@@ -559,7 +597,7 @@ function KillFeed({ r, tick }: { r: Replay; tick: number }) {
   );
 }
 
-function Timeline({ r, tick, onSeek }: { r: Replay; tick: number; onSeek: (t: number) => void }) {
+function Timeline({ r, tick, onSeek, notes }: { r: Replay; tick: number; onSeek: (t: number) => void; notes: Note[] }) {
   const span = r.last_tick - r.start_tick;
   const pct = (t: number) => `${((t - r.start_tick) / span) * 100}%`;
   const ref = useRef<HTMLDivElement>(null);
@@ -597,6 +635,10 @@ function Timeline({ r, tick, onSeek }: { r: Replay; tick: number; onSeek: (t: nu
         <div key={i} className="tl-bomb" style={{ left: pct(b.tick) }} title={b.event === "defuse" ? t("tl.defuse") : t("tl.plant", { site: b.site })}>
           {b.event === "defuse" ? "✂" : "💣"}
         </div>
+      ))}
+      {notes.map((n) => (
+        <div key={n.id} className="tl-note" style={{ left: pct(Math.max(r.start_tick, Math.min(r.last_tick, r.freeze_end_tick + n.sec * r.tick_rate))) }}
+          title={`${n.author_nick || t("notes.analyst")}: ${n.text}`} />
       ))}
       <div className="tl-head" style={{ left: pct(tick) }} />
     </div>

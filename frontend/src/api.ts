@@ -139,6 +139,34 @@ export interface PackResult {
   matches: { added: string[]; skipped: string[] };
 }
 
+// ---- notes with a timecode (freezetime/notes.py) and playlists (freezetime/playlists.py) ----
+export interface Note {
+  id: string;
+  match: string;
+  round: number;
+  sec: number; // seconds after the freeze end
+  text: string;
+  author: string; // roster member id; "" for the analyst's computer with nobody chosen
+  author_nick: string;
+  mentions: string[];
+  read_by: string[];
+  created: number;
+  updated: number;
+}
+export interface NoteList { notes: Note[]; unread: number; me: string | null }
+export interface PlaylistItem { id?: string; match: string; round: number; start: number | null; end: number | null; caption: string }
+export interface Playlist {
+  id: string;
+  name: string;
+  folder: string;
+  owner: string;
+  owner_nick: string;
+  items: (PlaylistItem & { id: string })[];
+  created: number;
+  updated: number;
+}
+export type PlaylistDraft = { name: string; folder: string; items: PlaylistItem[] };
+
 // ---- our team's profile (freezetime/team.py) ----
 export interface TeamMember { id: string; nick: string; steamid: string; role: string }
 export interface TeamProfile { format: number; name: string; members: TeamMember[]; updated: number }
@@ -621,6 +649,18 @@ export const api = {
     return { blob: await res.blob(), name };
   },
   packImport: (file: File) => request<PackResult>("/api/pack/import", { method: "PUT", body: file }),
+  notes: (o: { match?: string; mine?: boolean } = {}) =>
+    request<NoteList>(`/api/notes?${query({ ...(o.match ? { match: o.match } : {}), ...(o.mine ? { mine: true } : {}) })}`),
+  addNote: (n: { match: string; round: number; sec: number; text: string }) => request<Note>("/api/notes", json({ note: n })),
+  editNote: (id: string, text: string) => request<Note>(`/api/notes/${id}`, { ...json({ text }), method: "PUT" }),
+  deleteNote: (id: string) => request<{ deleted: string }>(`/api/notes/${id}`, { method: "DELETE" }),
+  readNotes: (ids: string[]) => request<{ unread: number }>("/api/notes/read", json({ ids })),
+  playlists: () => request<Playlist[]>("/api/playlists"),
+  playlist: (id: string) => request<Playlist>(`/api/playlists/${id}`),
+  createPlaylist: (p: PlaylistDraft) => request<Playlist>("/api/playlists", json({ playlist: p })),
+  updatePlaylist: (id: string, p: PlaylistDraft) => request<Playlist>(`/api/playlists/${id}`, { ...json({ playlist: p }), method: "PUT" }),
+  addPlaylistItem: (id: string, item: PlaylistItem) => request<Playlist>(`/api/playlists/${id}/items`, json({ item })),
+  deletePlaylist: (id: string) => request<{ deleted: string }>(`/api/playlists/${id}`, { method: "DELETE" }),
   team: () => request<TeamInfo>("/api/team"),
   saveTeam: (team: TeamProfile) => request<TeamInfo>("/api/team", { ...json(team), method: "PUT" }),
   scoutReport: (q: ScoutQuery) => request<ScoutReport>(`/api/scout/report?${query(q)}`),

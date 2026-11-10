@@ -207,7 +207,11 @@ function TeamReport({ teams, entry, map, tab, reload }: { teams: Teams; entry: S
         </span>
         <span className="grow" />
         <button className="small-btn screen-only" disabled={!report} title={t("scout.exportMdTitle")}
-          onClick={() => report && download(`${entry.name}-${map}.md`, dossierMarkdown(report, query))}>MD</button>
+          onClick={async () => {
+            if (!report) return;
+            const notes = await api.notes().then((d) => d.notes).catch(() => []);
+            download(`${entry.name}-${map}.md`, dossierMarkdown(report, query, notes));
+          }}>MD</button>
         <button className="small-btn screen-only" disabled={!report} title={t("scout.exportPdfTitle")} onClick={() => window.print()}>PDF</button>
         <a className="small screen-only" href="#/scout">{t("scout.allTeams")}</a>
         <div className="ctx-presets" style={{ flexBasis: "100%" }}>

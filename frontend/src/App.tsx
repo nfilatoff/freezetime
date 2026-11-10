@@ -11,9 +11,11 @@ import { CalloutsPage } from "./pages/Callouts";
 import { ScoutPage } from "./pages/Scout";
 import { BoardPage } from "./pages/Board";
 import { TeamPage } from "./pages/Team";
+import { NotesPage } from "./pages/Notes";
+import { PlaylistPlayer, PlaylistsPage } from "./pages/Playlists";
 import { ClipView } from "./components/ClipView";
 import { LineupsView } from "./components/LineupsView";
-import { IconBoard, IconLibrary, IconLogo, IconMap, IconScout, IconStar, IconTeam, IconUs } from "./components/Icons";
+import { IconBoard, IconLibrary, IconLogo, IconMap, IconScout, IconNote, IconPlaylist, IconStar, IconTeam, IconUs } from "./components/Icons";
 import { LANGS, detectSystemLang, setLang, t, useLang, type Key, type Lang } from "./i18n";
 
 function useHash(): string[] {
@@ -52,6 +54,18 @@ export function App() {
   useEffect(() => {
     if (allowed) api.teams().then((d) => setOwn(d.own)).catch(() => {});
   }, [allowed]);
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    if (!allowed) return;
+    const check = () => api.notes({ mine: true }).then((d) => setUnread(d.unread)).catch(() => {});
+    check();
+    const timer = setInterval(check, 60_000); // teammates write from their own computers
+    window.addEventListener("freezetime:notes", check);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("freezetime:notes", check);
+    };
+  }, [allowed, session?.member?.id]);
   const us = own ? `scout/${encodeURIComponent(own)}` : null;
   const nav: [string, Key, typeof IconLibrary][] = [
     ["", "nav.library", IconLibrary],
@@ -59,6 +73,8 @@ export function App() {
     ...(us ? [[us, "nav.us", IconUs] as [string, Key, typeof IconLibrary]] : []),
     ["team", "nav.team", IconTeam],
     ["board", "nav.board", IconBoard],
+    ["notes", "nav.notes", IconNote],
+    ["playlists", "nav.playlists", IconPlaylist],
     ["highlights", "nav.highlights", IconStar],
     ["callouts", "nav.callouts", IconMap],
   ];
@@ -66,6 +82,7 @@ export function App() {
   const active = page === "match" ? ""
     : page === "scout" && own && rest[0] === own ? us ?? ""
     : page === "aggregate" || page === "clip" || page === "lineups" ? "scout"
+    : page === "playlist" ? "playlists"
     : page ?? "";
   if (!session) return null;
   if (session.need) return <Gate session={session} joinFailed={joinFailed} />;
@@ -80,6 +97,7 @@ export function App() {
             <a key={key} href={`#/${key}`} className={`navitem ${active === key ? "active" : ""}`}>
               <Icon />
               {t(label)}
+              {key === "notes" && unread > 0 && <span className="nav-badge" title={t("notes.unread", { n: unread })}>{unread}</span>}
             </a>
           ))}
         </nav>
@@ -99,6 +117,12 @@ export function App() {
             <MatchPage id={rest[0]} tab={rest[1] ?? "overview"} round={rest[2] ? Number(rest[2]) : undefined} at={rest[3] ? Number(rest[3]) : undefined} />
           ) : page === "board" ? (
             <BoardPage id={rest[0]} />
+          ) : page === "notes" ? (
+            <NotesPage tab={rest[0]} />
+          ) : page === "playlists" ? (
+            <PlaylistsPage id={rest[0]} />
+          ) : page === "playlist" && rest[0] ? (
+            <PlaylistPlayer id={rest[0]} index={Number(rest[1] ?? 0)} />
           ) : page === "team" ? (
             <TeamPage onOwn={setOwn} />
           ) : page === "callouts" ? (

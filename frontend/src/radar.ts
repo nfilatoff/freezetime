@@ -49,23 +49,27 @@ export interface MapAssets {
 const metaCache = new Map<string, Promise<MapMeta>>();
 
 /** Map metadata plus one radar image per level (null where the image is not cached locally). */
+export async function loadMapAssets(map: string): Promise<MapAssets> {
+  let p = metaCache.get(map);
+  if (!p) {
+    p = api.mapMeta(map);
+    p.catch(() => metaCache.delete(map));
+    metaCache.set(map, p);
+  }
+  const meta = await p;
+  const images = await Promise.all(
+    meta.levels.map((lv) => (lv.has_image ? loadImage(radarUrl(lv.radar)).catch(() => null) : Promise.resolve(null))),
+  );
+  return { meta, images };
+}
+
 export function useMapAssets(map: string | undefined): { assets: MapAssets | null; error: string | null } {
   const [assets, setAssets] = useState<MapAssets | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (!map) return;
     let alive = true;
-    let p = metaCache.get(map);
-    if (!p) {
-      p = api.mapMeta(map);
-      metaCache.set(map, p);
-    }
-    p.then(async (meta) => {
-      const images = await Promise.all(
-        meta.levels.map((lv) => (lv.has_image ? loadImage(radarUrl(lv.radar)).catch(() => null) : Promise.resolve(null))),
-      );
-      if (alive) setAssets({ meta, images });
-    }).catch((e: Error) => alive && setError(e.message));
+    loadMapAssets(map).then((a) => alive && setAssets(a)).catch((e: Error) => alive && setError(e.message));
     return () => {
       alive = false;
     };

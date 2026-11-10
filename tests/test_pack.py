@@ -6,6 +6,8 @@ import zipfile
 import pytest
 
 from freezetime import board as B
+from freezetime import notes as N
+from freezetime import playlists as L
 from freezetime import pack as P
 from freezetime import team as T
 from tests.test_board import sample as board_sample
@@ -32,7 +34,7 @@ def test_boards_and_team_travel(tmp_path):
     first, second = B.create_board(a, board_sample()), B.create_board(a, board_sample(name="A exec"))
     T.save_team(a, team_sample())
     buf = packed(a, team=True)
-    assert P.read_manifest(buf) | {"created": 0} == {"format": 1, "created": 0, "boards": 2, "team": True, "matches": []}
+    assert P.read_manifest(buf) | {"created": 0} == {"format": 1, "created": 0, "boards": 2, "team": True, "notes": 0, "playlists": 0, "matches": []}
 
     result = P.import_pack(b, buf)
     assert result["boards"] == {"added": 2, "updated": 0, "skipped": 0}
@@ -122,3 +124,23 @@ def test_bad_packs_are_refused_and_leave_nothing(tmp_path, files, word):
 def test_not_a_zip(tmp_path):
     with pytest.raises(P.PackError, match="not a zip"):
         P.import_pack(tmp_path, io.BytesIO(b"hello"))
+
+
+def test_notes_and_playlists_travel(tmp_path):
+    a, b = library(tmp_path, "a"), library(tmp_path, "b")
+    coach = {"id": "cccccccc", "nick": "coach"}
+    note = N.add_note(a, {"match": "m1", "round": 3, "sec": 12.5, "text": "late"}, coach, [])
+    pl = L.create_playlist(a, {"name": "B retakes", "items": [{"match": "m1", "round": 3, "start": 5, "end": 20}]}, coach)
+    buf = packed(a, boards=[], notes=True, playlists=True)
+    assert P.read_manifest(buf)["notes"] == 1 and P.read_manifest(buf)["playlists"] == 1
+    result = P.import_pack(b, buf)
+    assert result["notes"]["added"] == 1 and result["playlists"]["added"] == 1
+    assert N.load_notes(b) == [note] and L.load_playlists(b) == [pl]
+    again = P.import_pack(b, packed(a, boards=[], notes=True, playlists=True))
+    assert again["notes"]["skipped"] == 1 and again["playlists"]["skipped"] == 1
+
+
+def test_bad_notes_in_a_pack(tmp_path):
+    with pytest.raises(P.PackError, match="notes.json"):
+        P.import_pack(tmp_path, zip_of({P.MANIFEST: MANIFEST, "notes.json": json.dumps([{"id": "0" * 12, "match": "../x", "round": 1, "text": "x"}])}))
+    assert not (tmp_path / "notes.json").exists()

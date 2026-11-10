@@ -31,6 +31,8 @@ from freezetime.aggregate import aggregate
 from freezetime.board import BoardError, create_board, delete_board, list_boards, load_board, update_board
 from freezetime.team import ROLES, TeamError, candidates, load_team, rename_team, save_team
 from freezetime.pack import PackError, export_pack, import_pack
+from freezetime.notes import NoteError, add_note, delete_note, load_notes, mark_read, unread_for, update_note
+from freezetime.playlists import PlaylistError, add_item, create_playlist, delete_playlist, get_playlist, load_playlists, update_playlist
 from freezetime.app import access
 from freezetime.app.archives import is_archive, unpack
 from freezetime.app.cs2 import BIND_COMMAND, SETTLE, CS2Bridge, NoConsole, game_running, steam_account
@@ -1064,13 +1066,16 @@ def create_app(out: str | Path = "out", team: bool = False) -> FastAPI:
         return Path(name)
 
     @api.post("/api/pack/export")
-    def pack_export(boards: list[str] | None = Body(None), team: bool = Body(False), matches: list[str] = Body(default_factory=list)) -> FileResponse:
+    def pack_export(
+        boards: list[str] | None = Body(None), team: bool = Body(False), matches: list[str] = Body(default_factory=list),
+        notes: bool = Body(False), playlists: bool = Body(False),
+    ) -> FileResponse:
         """``boards``: ids, or null for every board."""
         for match_id in matches:
             lib.match_dir(match_id)
         tmp = temp_zip()
         try:
-            export_pack(lib.out, tmp, boards=boards, team=team, matches=matches)
+            export_pack(lib.out, tmp, boards=boards, team=team, notes=notes, playlists=playlists, matches=matches)
         except PackError as e:
             tmp.unlink(missing_ok=True)
             raise HTTPException(400, str(e)) from e
@@ -1092,6 +1097,109 @@ def create_app(out: str | Path = "out", team: bool = False) -> FastAPI:
         if result["team"] == "added" and not lib.setting("own_team"):
             lib.set_setting("own_team", load_team(lib.out)["name"] or None)
         return result
+
+    # ---- notes with a timecode and playlists: every member writes their own ----
+    def me(request: Request) -> tuple[dict | None, str | None, bool]:
+        who = request.state.who
+        return who.member, who.member["id"] if who.member else None, who.can_edit
+
+    def members() -> list[dict]:
+        return load_team(lib.out)["members"]
+
+    @api.get("/api/notes")
+    def notes_list(request: Request, match: str | None = None, mine: bool = False) -> dict:
+        """Notes, the newest first; ``match`` narrows to one match, ``mine`` to the ones mentioning me."""
+        _, my_id, _ = me(request)
+        found = load_notes(lib.out)
+        unread = unread_for(found, my_id)
+        if match:
+            found = [n for n in found if n["match"] == match]
+        if mine:
+            found = [n for n in found if my_id and my_id in n.get("mentions", [])]
+        return {"notes": sorted(found, key=lambda n: -n["created"]), "unread": len(unread), "me": my_id}
+
+    @api.post("/api/notes")
+    def notes_add(request: Request, note: dict = Body(..., embed=True)) -> dict:
+        author, _, _ = me(request)
+        lib.match_dir(str(note.get("match", "")))
+        try:
+            return add_note(lib.out, note, author, members())
+        except NoteError as e:
+            raise HTTPException(400, str(e)) from e
+
+    @api.put("/api/notes/{note_id}")
+    def notes_update(request: Request, note_id: str, text: str = Body(..., embed=True)) -> dict:
+        _, my_id, can_edit = me(request)
+        try:
+            note = update_note(lib.out, note_id, text, my_id, can_edit, members())
+        except NoteError as e:
+            raise HTTPException(400, str(e)) from e
+        except PermissionError as e:
+            raise HTTPException(403, str(e)) from e
+        if note is None:
+            raise HTTPException(404, f"no note {note_id}")
+        return note
+
+    @api.delete("/api/notes/{note_id}")
+    def notes_delete(request: Request, note_id: str) -> dict:
+        _, my_id, can_edit = me(request)
+        try:
+            if not delete_note(lib.out, note_id, my_id, can_edit):
+                raise HTTPException(404, f"no note {note_id}")
+        except PermissionError as e:
+            raise HTTPException(403, str(e)) from e
+        return {"deleted": note_id}
+
+    @api.post("/api/notes/read")
+    def notes_read(request: Request, ids: list[str] = Body(..., embed=True)) -> dict:
+        _, my_id, _ = me(request)
+        mark_read(lib.out, ids, my_id or "")
+        return {"unread": len(unread_for(load_notes(lib.out), my_id))}
+
+    @api.get("/api/playlists")
+    def playlists_list() -> list[dict]:
+        """Every playlist, the last changed first."""
+        return sorted(load_playlists(lib.out), key=lambda p: -p.get("updated", 0))
+
+    @api.get("/api/playlists/{playlist_id}")
+    def playlists_get(playlist_id: str) -> dict:
+        pl = get_playlist(lib.out, playlist_id)
+        if pl is None:
+            raise HTTPException(404, f"no playlist {playlist_id}")
+        return pl
+
+    def playlist_call(fn, *args):
+        try:
+            result = fn(*args)
+        except PlaylistError as e:
+            raise HTTPException(400, str(e)) from e
+        except PermissionError as e:
+            raise HTTPException(403, str(e)) from e
+        if result is None or result is False:
+            raise HTTPException(404, "no such playlist")
+        return result
+
+    @api.post("/api/playlists")
+    def playlists_create(request: Request, playlist: dict = Body(..., embed=True)) -> dict:
+        owner, _, _ = me(request)
+        return playlist_call(create_playlist, lib.out, playlist, owner)
+
+    @api.put("/api/playlists/{playlist_id}")
+    def playlists_update(request: Request, playlist_id: str, playlist: dict = Body(..., embed=True)) -> dict:
+        _, my_id, can_edit = me(request)
+        return playlist_call(update_playlist, lib.out, playlist_id, playlist, my_id, can_edit)
+
+    @api.post("/api/playlists/{playlist_id}/items")
+    def playlists_add_item(request: Request, playlist_id: str, item: dict = Body(..., embed=True)) -> dict:
+        _, my_id, can_edit = me(request)
+        lib.match_dir(str(item.get("match", "")))
+        return playlist_call(add_item, lib.out, playlist_id, item, my_id, can_edit)
+
+    @api.delete("/api/playlists/{playlist_id}")
+    def playlists_delete(request: Request, playlist_id: str) -> dict:
+        _, my_id, can_edit = me(request)
+        playlist_call(delete_playlist, lib.out, playlist_id, my_id, can_edit)
+        return {"deleted": playlist_id}
 
     @api.get("/api/maps")
     def map_list() -> list[str]:

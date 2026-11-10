@@ -22,6 +22,7 @@ Features:
 - **Interface languages** — English, Russian and Spanish. English by default; if the browser or Windows language is Russian or Spanish, that language is used. The choice in the sidebar is remembered in the browser.
 - **Tactics board** — draw a tactic on any pool map in up to 4 steps (default, utility, entry, post-plant): CT/T players and C4 dragged from the toolbar, 6 grenades with their real radius and a throw point, pencil, arrows, shapes and text stickers. Dragging a player on a later step records the route they walk, and playback animates the players along their routes. Undo/redo, rebindable hotkeys, saved tactics with a map filter, export to PNG (one step or all steps in a grid), GIF and MP4. The "To board" button in the replay copies the current moment (players with names, smokes, fires, the bomb), and the board can take you back to that moment.
 - **Team** — a team profile with a roster (nick, SteamID, role), a team server (`freezetime app --team`) that teammates open from their own computers with a join link, and `.zip` packs with boards, the roster and parsed matches for those who are not on the server. Everything stays on your computers: no cloud, no accounts.
+- **Notes and playlists** — a note with a timecode from the 2D replay (`@nick` tells a teammate, who sees it under "For me" with an unread count), and playlists of rounds or stretches of rounds: folders, drag to reorder, playback in a row, GIF/MP4 cutting and recording in CS2.
 
 | Match overview | Tactics | Maps |
 |---|---|---|
@@ -154,6 +155,8 @@ Tests: `pytest`. The fixture is rounds 1–8 of one Dust2 match, built by `tests
 | `out/library.json` | App settings: demo folders, CS2 folder and network console port, team names (`team_aliases`), own team (`own_team`). |
 | `out/boards/<id>.json` | Saved tactics boards. |
 | `out/team.json` | The team profile: name and roster. |
+| `out/notes.json` | Notes with a timecode: match, round, second, text, author, mentions, who has read them. |
+| `out/playlists.json` | Playlists: name, folder, owner and items (match, round, from–to seconds, caption). |
 | `<CS2>/game/csgo/cfg/freezetime_*.cfg` | Lineups and practice lists written by the "Open in CS2" and "Install in CS2" buttons. |
 | `out/_uploads/` | Demos uploaded through the app (and extracted from archives). |
 | `~/.awpy/<version>/` | awpy cache: radars (`radars/*.png`) and `map_data.json` (coordinate transform, levels). |
@@ -216,6 +219,8 @@ Maps outside the pool (Overpass, Train, Vertigo, …) have no config. `tactics` 
 | `board.py` | Tactics boards: checking, storing and listing `out/boards/<id>.json`. |
 | `team.py` | The team profile (`out/team.json`): checking, storing, roster suggestions from our demos. |
 | `pack.py` | Packs: export and import of a `.zip` with boards, the team profile and parsed matches. |
+| `notes.py` | Notes with a timecode: storing, `@nick` mentions, read marks, merging from packs. |
+| `playlists.py` | Playlists: storing, items, owner rights, merging from packs. |
 | `app/access.py` | Rules of the team server: who is asking (this computer, staff, player) and what they may do. |
 | `viz.py` | Images over the radar (matplotlib via `awpy.plot`), per-level panels. |
 | `report.py` | Markdown reports. |
@@ -342,10 +347,16 @@ The "Team" page (`#/team`, `freezetime/team.py`, `freezetime/app/access.py`, `fr
 - **Profile** — the team name and the roster: nick, SteamID64 (optional: a coach is not in the demos) and role (IGL, entry, AWP, lurker, support, anchor, rifler, coach, analyst, manager). Players seen in your demos who are not on the roster are offered below it and added with a click. The profile name is the same thing as "our team" (★ on the Opponent page). Roster nicks are offered when you name a player on the tactics board.
 - **Team server** — `freezetime app --team` listens on every network interface and prints join links (they are also on the Team page): `http://<address>:8000/#/join/<token>`. Teammates on the same network, Tailscale or ZeroTier open a link and pick their nick from the roster. There are no passwords: the token keeps strangers out (it sits in the `#fragment`, so it is in no server log, and the page trades it for a cookie), the nick says who you are. "New links" makes a new token; the old links stop working.
 - **Rights** — the computer the app runs on is the analyst: everything is allowed. Staff (analyst, coach, manager, IGL) on other computers can upload and parse demos, save boards and edit the team. Players look. The game (`/api/cs2/*`), the recorder (`/api/recorder/*`), HLAE, library folders and demo files answer the analyst's computer only: nobody presses keys in somebody else's CS2. Without `--team` the app refuses every other computer, even when started with `--host 0.0.0.0`.
-- **Packs** — "Download a pack" writes a `.zip` with all boards, the team profile and, if picked, parsed matches (Parquet tables only: no `.dem`, no replay cache, no recordings). "Import a pack…" merges it: a board replaces the local one of the same id only when it is newer, a match already in the library stays as it is, the team profile is taken only while there is no local roster. File names inside a pack are checked before anything is written.
+- **Packs** — "Download a pack" writes a `.zip` with all boards, the team profile, notes, playlists and, if picked, parsed matches (Parquet tables only: no `.dem`, no replay cache, no recordings). "Import a pack…" merges it: a board replaces the local one of the same id only when it is newer, a match already in the library stays as it is, the team profile is taken only while there is no local roster. File names inside a pack are checked before anything is written.
 - **Links** — "🔗 Link" in the replay copies a link to the round and second, on a saved board — to the tactic. On the analyst's computer the link uses the team server's network address, so a teammate can open it.
 
 The team server has no HTTPS: use it on a network you trust or over Tailscale/ZeroTier, not on the open internet. A request counts as "this computer" by its loopback address, so a reverse proxy on the same machine would make everybody the analyst.
+
+### App: notes and playlists
+
+- **Notes** — "📝 Note" in the 2D replay writes a note at the current second of the round (`freezetime/notes.py`, `out/notes.json`). It is signed with the nick chosen on the Team page ("analyst" on the app's own computer when nobody is chosen). `@nick` names a teammate from the roster: the note appears under "For me" on the "Notes" page (`#/notes`), the menu shows the number of unread mentions. Notes of a round are listed under the replay and marked on its timeline; a click jumps to the moment. The "Notes" page lists the notes of every match, newest first or by match and round. A note is changed or deleted by its author or the staff. The Markdown export of the opponent dossier ends with the notes on its matches.
+- **Playlists** — "☆ Playlist" in the 2D replay adds the round, or a stretch of it (from–to seconds after the freeze end; empty means from the freeze end / to the end of the round), with a caption to a new or an existing playlist (`freezetime/playlists.py`, `out/playlists.json`). The "Playlists" page (`#/playlists`) groups them by folder and shows the recent ones; in a playlist, items are reordered by dragging and edited in place. "▶ Play" (`#/playlist/<id>/<item>`) plays the items one after another in the 2D replay, with a switch to the next item and to another playlist. "Add its highlights" turns the automatic and custom highlights of a match into items (highlights stay where they are). Video: every item is drawn on the radar like a highlight clip, GIF or MP4, in one zip; an item to the end of the round is cut at 90 s. "Record in CS2" (on the app's own computer) sends the items of one match to the recorder.
+- Notes and playlists go into packs together with boards and the team profile.
 
 ### App: opponent (dossier)
 

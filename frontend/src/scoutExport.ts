@@ -1,5 +1,5 @@
 // The dossier as a Markdown file: conclusions first, then the tables behind them.
-import type { Row, ScoutQuery, ScoutReport } from "./api";
+import type { Note, Row, ScoutQuery, ScoutReport } from "./api";
 import { buyLabel, cardText, namedRows, stratCore, tempoLabel } from "./components/InsightCards";
 import { t, td } from "./i18n";
 
@@ -14,7 +14,7 @@ function table(title: string, rows: Row[], columns: string[]): string {
 
 const sideText = (side: string) => (side === "terrorist" ? "T" : side === "counter-terrorist" ? "CT" : t("common.bothSides"));
 
-export function dossierMarkdown(report: ScoutReport, q: ScoutQuery): string {
+export function dossierMarkdown(report: ScoutReport, q: ScoutQuery, notes: Note[] = []): string {
   const s = report.sample;
   const out = [
     `# ${t("scout.exportTitle", { team: report.team, map: q.map.replace(/^de_/, "") })}`,
@@ -42,6 +42,15 @@ export function dossierMarkdown(report: ScoutReport, q: ScoutQuery): string {
     table(t("scout.tab.nades"), report.nades.slice(0, 20), ["side", "type", "zone", "rounds", "per_round_pct", "median_sec"]),
     table(t("scout.tab.players"), report.players, ["name", "matches", "rounds", "kd", "adr", "kpr", "hs_pct", "opening_win_pct", "trade_kill_pct", "traded_death_pct", "nearest_mate", "top_weapons"]),
   );
+  const ours = notes.filter((n) => report.matches.some((m) => m.id === n.match));
+  if (ours.length) {
+    out.push(`## ${t("notes.title")}`, "");
+    for (const n of [...ours].sort((a, b) => a.match.localeCompare(b.match) || a.round - b.round || a.sec - b.sec)) {
+      const at = n.sec < 0 ? `-${Math.round(-n.sec)}` : String(Math.round(n.sec));
+      out.push(`- ${t("notes.mdLine", { round: n.round, sec: at, author: n.author_nick || t("notes.analyst") })} ${n.text.replace(/\n+/g, " ")} (${n.match})`);
+    }
+    out.push("");
+  }
   return out.filter((part) => part !== undefined).join("\n");
 }
 
