@@ -381,7 +381,7 @@ The "Opponent" page: team, map, last N matches, side and round type are chosen o
 | Heatmap | The same modes as in a match, over the selected rounds of all matches. |
 | Economy | Round after the pistol, buy by loss streak, wins by side and buy, site by round type. |
 | Players | ADR, K/D, openings, trade rate, distance to the nearest teammate during the first minute of the round, weapons; where the player is at second 15 and which zones they never visit. |
-| Grenades, Clips | Lineups and the clip builder with the team's matches already selected. |
+| Grenades, Clips | Lineups and the clip builder follow the filters above: the map, the team (with its other names), the side, the buy and the round selection; only the team's throws and players. Changing a filter updates both at once. |
 
 **Team.** In a demo a team is named after its clan tag or captain (`team_<nick>` on FACEIT), so one team can have many names. On the "Opponent" page they can be given one name ("Team names…"); it's stored in `library.json`. The app itself suggests merging names with three or more shared players. The star next to a team marks it as your own: an "Us" item appears in the menu while the library has matches of that team.
 

@@ -3,7 +3,7 @@
 // JSON and a CS2 practice config, and buttons that put the player on the lineup in CS2.
 import { useFitHeight, useFitRest } from "../fit";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type CS2Status, type Lineup, type MatchOverview, type Throw, type Throws } from "../api";
+import { api, type CS2Status, type Lineup, type MatchOverview, type ScoutScope, type Throw, type Throws } from "../api";
 import { download } from "../clipExport";
 import { drawCallouts, useCalloutMode } from "../callouts";
 import { CalloutToggle } from "./CalloutToggle";
@@ -204,9 +204,12 @@ function drawLineups(canvas: HTMLCanvasElement, assets: MapAssets, groups: Group
   });
 }
 
-export function LineupsView({ initial, scope }: { initial?: MatchOverview; scope?: { map: string; ids: string[] } }) {
-  const [map, setMap] = useState(scope?.map ?? initial?.map ?? "");
-  const [ids, setIds] = useState<string[]>(scope?.ids ?? (initial ? [initial.id] : []));
+/** With `scope` (the opponent page) the map, matches, team and rounds come from the filters above it. */
+export function LineupsView({ initial, scope }: { initial?: MatchOverview; scope?: ScoutScope }) {
+  const [ownMap, setMap] = useState(initial?.map ?? "");
+  const [ownIds, setIds] = useState<string[]>(initial ? [initial.id] : []);
+  const map = scope?.map ?? ownMap;
+  const ids = scope?.ids ?? ownIds;
   const [data, setData] = useState<Map<string, Throws>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -245,18 +248,24 @@ export function LineupsView({ initial, scope }: { initial?: MatchOverview; scope
     };
   }, []);
 
+  // in a scope, a throw counts when its round is selected and it was thrown from the team's side of that round
+  const scopeSides = useMemo(() => scope && new Map(scope.rounds.map((r) => [`${r.match}#${r.round}`, r.side])), [scope]);
   const all: MatchThrow[] = useMemo(() => ids.flatMap((id, i) => {
     const d = data.get(id);
-    return d ? d.throws.map((t) => ({ ...t, matchId: id, matchNo: i + 1, playdemo: d.playdemo, tickRate: d.tick_rate })) : [];
-  }), [ids, data]);
+    if (!d) return [];
+    const throws = scopeSides ? d.throws.filter((t) => scopeSides.get(`${id}#${t.round_num}`) === t.side) : d.throws;
+    return throws.map((t) => ({ ...t, matchId: id, matchNo: i + 1, playdemo: d.playdemo, tickRate: d.tick_rate }));
+  }), [ids, data, scopeSides]);
   const teams = [...new Set(all.map((t) => t.team).filter((t): t is string => !!t))].sort();
-  const players = [...new Set(all.filter((t) => !team || t.team === team).map((t) => t.name))].sort((a, b) => a.localeCompare(b));
+  const teamOn = scope ? "" : team; // the scope already keeps only the team's throws
+  const players = [...new Set(all.filter((t) => !teamOn || t.team === teamOn).map((t) => t.name))].sort((a, b) => a.localeCompare(b));
+  const playerOn = players.includes(player) ? player : ""; // a player gone with a new selection no longer filters
   const zones = [...new Set(all.map((t) => t.land_zone).filter((z): z is string => !!z))].sort();
 
   const filtered = useMemo(() => all.filter((t) =>
-    types[t.type] && (!side || t.side === side) && (!team || t.team === team) && (!player || t.name === player) &&
+    types[t.type] && (!side || t.side === side) && (!teamOn || t.team === teamOn) && (!playerOn || t.name === playerOn) &&
     (!technique || t.technique === technique) && (!landZone || t.land_zone === landZone)),
-  [all, types, side, team, player, technique, landZone]);
+  [all, types, side, teamOn, playerOn, technique, landZone]);
   const groups = useMemo(() => groupThrows(filtered).filter((g) => g.throws.length >= minCount), [filtered, minCount]);
   const selected = groups.find((g) => g.key === selectedKey) ?? null;
 
@@ -307,7 +316,7 @@ export function LineupsView({ initial, scope }: { initial?: MatchOverview; scope
   const copy = (text: string, what: string) =>
     navigator.clipboard.writeText(text).then(() => setNote(t("lu.copied", { what }))).catch(() => setNote(text));
 
-  const exportName = listName.trim() || `${map.replace(/^de_/, "")}_${player || team || "all"}`;
+  const exportName = listName.trim() || `${map.replace(/^de_/, "")}_${playerOn || scope?.team || teamOn || "all"}`;
   const listCfg = async (install: boolean) => {
     try {
       const r = await api.cs2List(map, exportName, groups.map(lineupOf), install);
@@ -322,8 +331,14 @@ export function LineupsView({ initial, scope }: { initial?: MatchOverview; scope
   return (
     <div className="lineups">
       <div className="clip-side" ref={sideRef} style={Number.isFinite(sideH) ? { maxHeight: sideH, overflowY: "auto" } : undefined}>
-        <h3>{t("common.demos")}</h3>
-        <MatchPicker map={map} setMap={(m) => { setMap(m); setSelectedKey(null); }} ids={ids} setIds={setIds} onError={setError} />
+        {scope ? (
+          <div className="muted small">{t("scope.fromFilters", { team: scope.team, m: scope.ids.length, r: scope.rounds.length })}</div>
+        ) : (
+          <>
+            <h3>{t("common.demos")}</h3>
+            <MatchPicker map={map} setMap={(m) => { setMap(m); setSelectedKey(null); }} ids={ids} setIds={setIds} onError={setError} />
+          </>
+        )}
 
         <h3>{t("lu.filters")}</h3>
         <div className="row small">
@@ -339,11 +354,13 @@ export function LineupsView({ initial, scope }: { initial?: MatchOverview; scope
             <option value="terrorist">T</option>
             <option value="counter-terrorist">CT</option>
           </select>
-          <select value={team} onChange={(e) => { setTeam(e.target.value); setPlayer(""); }}>
-            <option value="">{t("common.allTeams")}</option>
-            {teams.map((tm) => <option key={tm}>{tm}</option>)}
-          </select>
-          <select value={player} onChange={(e) => setPlayer(e.target.value)}>
+          {!scope && (
+            <select value={team} onChange={(e) => { setTeam(e.target.value); setPlayer(""); }}>
+              <option value="">{t("common.allTeams")}</option>
+              {teams.map((tm) => <option key={tm}>{tm}</option>)}
+            </select>
+          )}
+          <select value={playerOn} onChange={(e) => setPlayer(e.target.value)}>
             <option value="">{t("common.allPlayers")}</option>
             {players.map((p) => <option key={p}>{p}</option>)}
           </select>
@@ -381,7 +398,7 @@ export function LineupsView({ initial, scope }: { initial?: MatchOverview; scope
 
       <div className="clip-main">
         {mapError2 ? <div className="error">{mapError2}</div> : !ids.length ? (
-          <div className="muted">{t("common.pickDemos")}</div>
+          <div className="muted">{scope ? t("scout.noRounds") : t("common.pickDemos")}</div>
         ) : !assets ? <div className="muted">{t("common.loading")}</div> : (
           <>
             <CalloutToggle meta={assets.meta} />

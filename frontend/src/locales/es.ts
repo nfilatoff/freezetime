@@ -872,7 +872,8 @@ export const es: Record<Key, Entry> = {
   "scout.playersHint": "Haz clic en un jugador para ver sus armas abajo. La distancia está en unidades del juego, durante el primer minuto de la ronda.",
   "scout.weapons": "Armas",
   "scout.weaponsOf": "Armas: {name}",
-  "scout.nadeLineups": "Lineups en estas partidas",
+  "scout.nadeLineups": "Lineups del equipo en las rondas elegidas",
+  "scope.fromFilters": "Según los filtros de arriba: {team}, partidas: {m}, rondas: {r}. Mapa, lado y compra se eligen allí.",
 
   // ---- callouts ----
   "nav.callouts": "Posiciones",

@@ -65,6 +65,19 @@ def test_aliases_join_two_matches_into_one_team(data, team):
     assert report["sample"]["rounds"] == s.rounds.height
 
 
+def test_report_rounds_name_the_teams_side_for_lineups_and_clips(data, team):
+    """The opponent page filters its lineups and clips by these rounds: match, round and the team's side in it."""
+    s = select_rounds([data], team, buy="full")
+    report = dossier(s)
+    rounds = report["rounds"]
+    assert rounds.height == s.rounds.height > 0
+    assert set(rounds["buy"].to_list()) == {"full"}
+    own = data.rounds.filter(pl.col("team") == team).select("round_num", "side")
+    joined = rounds.join(own, on="round_num", suffix="_own")
+    assert joined.height == rounds.height and (joined["side"] == joined["side_own"]).all()
+    assert {m["id"] for m in report["matches"]} == set(rounds["match"].to_list()) == {data.id}
+
+
 def test_unknown_team_is_an_error(data):
     with pytest.raises(ValueError):
         select_rounds([data], "nobody")

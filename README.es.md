@@ -381,7 +381,7 @@ Página «Rival»: equipo, mapa, últimas N partidas, lado y tipo de ronda se el
 | Heatmap | Los mismos modos que en la partida, sobre las rondas elegidas de todas las partidas. |
 | Economía | Ronda tras las pistolas, compra según racha de derrotas, victorias por lado y compra, sitio por tipo de ronda. |
 | Jugadores | ADR, K/D, aperturas, trade rate, distancia al compañero más cercano durante el primer minuto de la ronda, armas; dónde está el jugador en el segundo 15 y en qué zonas no aparece nunca. |
-| Granadas, Clips | Lineups y constructor de clips con las partidas del equipo ya elegidas. |
+| Granadas, Clips | Lineups y constructor de clips siguen los filtros de arriba: mapa, equipo (con sus otros nombres), lado, compra y selección de rondas; solo lanzamientos y jugadores de ese equipo. Cambiar un filtro actualiza ambos a la vez. |
 
 **Equipo.** En la demo el equipo se llama según su clan tag o su capitán (`team_<nick>` en FACEIT), así que un mismo equipo puede tener muchos nombres. En la página «Rival» se les puede dar un único nombre («Nombres de equipos…»); se guarda en `library.json`. La aplicación propone por sí misma unir nombres con tres o más jugadores en común. La estrella junto a un equipo lo marca como propio: en el menú aparece la opción «Nosotros» mientras la biblioteca tenga partidas de ese equipo.
 

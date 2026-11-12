@@ -273,6 +273,15 @@ export interface ScoutReport {
   rounds: Row[];
 }
 
+/** The opponent page's selection handed to its lineups and clips: the team's rounds and its side in each. */
+export interface ScoutScope {
+  map: string;
+  team: string; // the analysed team's name after aliases
+  buy: string; // the buy filter above, for captions
+  ids: string[]; // matches with selected rounds, newest first
+  rounds: { match: string; round: number; side: Side }[];
+}
+
 export interface ScoutQuery {
   team: string;
   map: string;

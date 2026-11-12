@@ -4,7 +4,7 @@
 // from the map's callouts and a legend. Exports go into a zip with a text file of the facts.
 import { useFitHeight, useFitRest } from "../fit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, type MatchOverview, type Replay, type Side } from "../api";
+import { api, type MatchOverview, type Replay, type ScoutScope, type Side } from "../api";
 import { canEncodeVideo, download, exportGif, exportMp4, zipWith } from "../clipExport";
 import { buyLabel, clockOf, summarize, type ClipInfo, type Summary, type Track } from "../clipSummary";
 import { calloutsOn, drawCallouts } from "../callouts";
@@ -561,16 +561,19 @@ interface RoundOption {
 const SIZES = [512, 768, 1024];
 
 // ---- component ----
-export function ClipView({ initial, scope }: { initial?: MatchOverview; scope?: { map: string; ids: string[]; side?: string; buy?: string } }) {
-  const [map, setMap] = useState(scope?.map ?? initial?.map ?? "");
-  const [matchIds, setMatchIds] = useState<string[]>(scope?.ids ?? (initial ? [initial.id] : []));
+/** With `scope` (the opponent page) the map, matches, team and rounds come from the filters above it. */
+export function ClipView({ initial, scope }: { initial?: MatchOverview; scope?: ScoutScope }) {
+  const [ownMap, setMap] = useState(initial?.map ?? "");
+  const [ownIds, setMatchIds] = useState<string[]>(initial ? [initial.id] : []);
+  const map = scope?.map ?? ownMap;
+  const matchIds = scope?.ids ?? ownIds;
   const [overviews, setOverviews] = useState<Map<string, MatchOverview>>(new Map(initial ? [[initial.id, initial]] : []));
   const { assets, error: mapError } = useMapAssets(map || undefined);
 
   const [subject, setSubject] = useState<Subject | null>(null);
-  const [sideFilter, setSideFilter] = useState<Side | "">((scope?.side as Side | undefined) || "terrorist");
+  const [sideFilter, setSideFilter] = useState<Side | "">("terrorist");
   const [resultFilter, setResultFilter] = useState<"" | "won" | "lost">("");
-  const [buyFilter, setBuyFilter] = useState(scope?.buy ?? "");
+  const [buyFilter, setBuyFilter] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
 
   const [layout, setLayout] = useState<Layout>("overlay");
@@ -616,25 +619,44 @@ export function ClipView({ initial, scope }: { initial?: MatchOverview; scope?: 
 
   const selected = matchIds.map((id) => overviews.get(id)).filter((ov): ov is MatchOverview => !!ov);
 
-  // players over all selected matches (a player is the same steamid in every demo)
+  // in a scope: the analysed team's name inside each demo (before aliases), found by its side in a selected round
+  const scopeTeam = useMemo(() => {
+    const out = new Map<string, string>();
+    for (const sr of scope?.rounds ?? []) {
+      const ov = overviews.get(sr.match);
+      if (!ov || out.has(sr.match)) continue;
+      const tl = ov.timeline.find((r) => r.round === sr.round);
+      const raw = tl && Object.keys(ov.score).find((tm) => tl.teams[tm]?.side === sr.side);
+      if (raw) out.set(sr.match, raw);
+    }
+    return out;
+  }, [scope, overviews]);
+
+  // players over all selected matches (a player is the same steamid in every demo); in a scope, the team's only
   const roster = useMemo(() => {
     const byId = new Map<string, { steamid: string; name: string; teams: Map<string, number>; matches: number }>();
     for (const ov of selected) {
       for (const p of ov.players) {
         if (!p.steamid) continue;
+        if (scope && String(p.team ?? "") !== scopeTeam.get(ov.id)) continue;
         const id = String(p.steamid);
         const e = byId.get(id) ?? { steamid: id, name: String(p.name), teams: new Map(), matches: 0 };
         e.name = String(p.name);
         e.matches++;
-        const team = String(p.team ?? "");
+        const team = scope ? scope.team : String(p.team ?? "");
         e.teams.set(team, (e.teams.get(team) ?? 0) + 1);
         byId.set(id, e);
       }
     }
     return [...byId.values()].map((e) => ({ ...e, team: [...e.teams].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "" }))
       .sort((a, b) => b.matches - a.matches || a.team.localeCompare(b.team) || a.name.localeCompare(b.name));
-  }, [selected]);
-  const teams = useMemo(() => [...new Set(selected.flatMap((ov) => Object.keys(ov.score)))].sort(), [selected]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected.map((ov) => ov.id).join(), scope, scopeTeam]);
+  const teams = useMemo(
+    () => (scope ? [scope.team] : [...new Set(selected.flatMap((ov) => Object.keys(ov.score)))].sort()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selected.map((ov) => ov.id).join(), scope],
+  );
 
   useEffect(() => {
     if (matchIds.some((id) => !overviews.has(id))) return; // keep the choice while matches load
@@ -648,6 +670,19 @@ export function ClipView({ initial, scope }: { initial?: MatchOverview; scope?: 
   // rounds of the subject's team in every selected match
   const options: RoundOption[] = useMemo(() => {
     if (!subject) return [];
+    if (scope) {
+      // just the selected rounds, in match order, oldest round first
+      return scope.rounds.flatMap((sr) => {
+        const ov = overviews.get(sr.match);
+        const team = scopeTeam.get(sr.match);
+        const r = ov?.timeline.find((x) => x.round === sr.round);
+        if (!ov || !team || !r) return [];
+        return [{
+          key: `${sr.match}#${sr.round}`, matchId: sr.match, no: matchIds.indexOf(sr.match) + 1, round: sr.round, team, side: sr.side,
+          won: r.winner === team, buy: r.teams[team]?.buy ?? null, opponent: Object.keys(ov.score).find((t) => t !== team) ?? null,
+        }];
+      }).sort((a, b) => a.no - b.no || a.round - b.round);
+    }
     return matchIds.flatMap((id, i) => {
       const ov = overviews.get(id);
       if (!ov) return [];
@@ -659,13 +694,14 @@ export function ClipView({ initial, scope }: { initial?: MatchOverview; scope?: 
         won: r.winner === team, buy: r.teams[team]?.buy ?? null, opponent,
       }));
     });
-  }, [subject, matchIds, overviews]);
+  }, [subject, matchIds, overviews, scope, scopeTeam]);
 
-  // filters pick the rounds; chips then add or remove single rounds
+  // filters pick the rounds (in a scope, side and buy are already chosen above); chips then add or remove single rounds
   const optionKeys = options.map((o) => o.key).join(",");
   useEffect(() => {
     setPicked(new Set(options.filter((o) =>
-      (!sideFilter || o.side === sideFilter) && (!resultFilter || (resultFilter === "won") === o.won) && (!buyFilter || o.buy === buyFilter),
+      (!!scope || !sideFilter || o.side === sideFilter) && (!resultFilter || (resultFilter === "won") === o.won) &&
+      (!!scope || !buyFilter || o.buy === buyFilter),
     ).map((o) => o.key)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [optionKeys, sideFilter, resultFilter, buyFilter]);
@@ -691,7 +727,8 @@ export function ClipView({ initial, scope }: { initial?: MatchOverview; scope?: 
     if (!subject || !assets || chosen.some((o) => !replays.has(o.key))) return null;
     const tracks: Track[] = chosen.map((o) => {
       const r = replays.get(o.key)!;
-      const ps = r.players.filter((p) => (subject.kind === "player" ? p.steamid === subject.steamid : p.team === subject.team));
+      // the team by its name in this demo: in a scope it can differ from the alias the subject carries
+      const ps = r.players.filter((p) => (subject.kind === "player" ? p.steamid === subject.steamid : p.team === o.team));
       return {
         key: o.key, matchId: o.matchId, matchNo: o.no, round: o.round, label: matchIds.length > 1 ? `M${o.no} R${o.round}` : `R${o.round}`,
         r, players: ps, ids: new Set(ps.map((p) => p.steamid)), team: o.team, side: o.side, won: o.won, buy: o.buy, opponent: o.opponent,
@@ -709,12 +746,12 @@ export function ClipView({ initial, scope }: { initial?: MatchOverview; scope?: 
       kind: subject.kind,
       name: player ? player.name : subject.kind === "team" ? subject.team : "",
       team: player ? player.team : subject.kind === "team" ? subject.team : "",
-      map, from, to: Math.min(to ?? longest, longest), layout, buy: buyFilter || null,
+      map, from, to: Math.min(to ?? longest, longest), layout, buy: (scope ? scope.buy : buyFilter) || null,
       matches: matchIds.map((id, i) => ({ no: i + 1, id, opponent: options.find((o) => o.matchId === id)?.opponent ?? null })),
     };
     return { tracks, info, summary: summarize(tracks, assets.meta, info), layers, colors };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [replays, chosenKeys, subject, assets, layout, from, to, layers, buyFilter]);
+  }, [replays, chosenKeys, subject, assets, layout, from, to, layers, buyFilter, scope]);
 
   const total = clip ? duration(clip) : 0;
   const levels = assets ? panelLevels(assets.meta, assets.meta.levels.length > 1 ? view : 0) : [0];
@@ -820,8 +857,14 @@ export function ClipView({ initial, scope }: { initial?: MatchOverview; scope?: 
   return (
     <div className="clip">
       <div className="clip-side" ref={sideRef} style={Number.isFinite(sideH) ? { maxHeight: sideH, overflowY: "auto" } : undefined}>
-        <h3>{t("common.demos")}</h3>
-        <MatchPicker map={map} setMap={setMap} ids={matchIds} setIds={setMatchIds} onError={setError} />
+        {scope ? (
+          <div className="muted small">{t("scope.fromFilters", { team: scope.team, m: scope.ids.length, r: scope.rounds.length })}</div>
+        ) : (
+          <>
+            <h3>{t("common.demos")}</h3>
+            <MatchPicker map={map} setMap={setMap} ids={matchIds} setIds={setMatchIds} onError={setError} />
+          </>
+        )}
 
         <h3>{t("clip.who")}</h3>
         <select
@@ -845,20 +888,24 @@ export function ClipView({ initial, scope }: { initial?: MatchOverview; scope?: 
 
         <h3>{t("clip.rounds", { n: chosen.length })}</h3>
         <div className="row small">
-          <select value={sideFilter} onChange={(e) => setSideFilter(e.target.value as Side | "")}>
-            <option value="">{t("common.bothSides")}</option>
-            <option value="terrorist">{t("clip.asT")}</option>
-            <option value="counter-terrorist">{t("clip.asCT")}</option>
-          </select>
+          {!scope && (
+            <select value={sideFilter} onChange={(e) => setSideFilter(e.target.value as Side | "")}>
+              <option value="">{t("common.bothSides")}</option>
+              <option value="terrorist">{t("clip.asT")}</option>
+              <option value="counter-terrorist">{t("clip.asCT")}</option>
+            </select>
+          )}
           <select value={resultFilter} onChange={(e) => setResultFilter(e.target.value as "" | "won" | "lost")}>
             <option value="">{t("clip.anyResult")}</option>
             <option value="won">{t("clip.wins")}</option>
             <option value="lost">{t("clip.losses")}</option>
           </select>
-          <select value={buyFilter} onChange={(e) => setBuyFilter(e.target.value)}>
-            <option value="">{t("clip.anyBuy")}</option>
-            {buys.map((b) => <option key={b} value={b}>{buyLabel(b)}</option>)}
-          </select>
+          {!scope && (
+            <select value={buyFilter} onChange={(e) => setBuyFilter(e.target.value)}>
+              <option value="">{t("clip.anyBuy")}</option>
+              {buys.map((b) => <option key={b} value={b}>{buyLabel(b)}</option>)}
+            </select>
+          )}
         </div>
         {matchIds.map((id, i) => {
           const rows = options.filter((o) => o.matchId === id);
@@ -959,7 +1006,7 @@ export function ClipView({ initial, scope }: { initial?: MatchOverview; scope?: 
         {mapError ? (
           <div className="error">{mapError}</div>
         ) : !matchIds.length ? (
-          <div className="muted">{t("common.pickDemos")}</div>
+          <div className="muted">{scope ? t("scout.noRounds") : t("common.pickDemos")}</div>
         ) : !clip ? (
           <div className="muted">{loading ? t("clip.loadingRounds", { a: loaded, b: chosen.length }) : chosen.length ? t("clip.preparing") : t("clip.noRounds")}</div>
         ) : clip.tracks.length === 0 ? (

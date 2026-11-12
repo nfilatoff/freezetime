@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, ownWithMatches, type MovementFilter, type MultiroundPlayer, type RoundRef, type Row, type ScoutQuery, type ScoutReport, type ScoutTeam, type SimilarRound, type Strat, type Teams } from "../api";
+import { api, ownWithMatches, type MovementFilter, type MultiroundPlayer, type RoundRef, type Row, type ScoutQuery, type ScoutReport, type ScoutScope, type ScoutTeam, type Side, type SimilarRound, type Strat, type Teams } from "../api";
 import { go, hashQuery } from "../router";
 import { drawCallouts, useCalloutMode } from "../callouts";
 import { CalloutToggle } from "../components/CalloutToggle";
@@ -178,6 +178,11 @@ function TeamReport({ teams, entry, map, tab, reload }: { teams: Teams; entry: S
       alive = false;
     };
   }, [query]);
+  // the selection above, handed to the lineups and clips so they show the same team, rounds and sides
+  const scope: ScoutScope | null = useMemo(() => report && {
+    map, team: entry.name, buy: f.buy, ids: report.matches.map((m) => m.id),
+    rounds: report.rounds.map((r) => ({ match: String(r.match), round: Number(r.round_num), side: r.side as Side })),
+  }, [report, map, entry.name, f.buy]);
   const nav = (patch: Partial<Filters>) => {
     window.location.hash = scoutHash(entry.name, map, tab, { ...f, ...patch });
   };
@@ -241,8 +246,8 @@ function TeamReport({ teams, entry, map, tab, reload }: { teams: Teams; entry: S
             {tab === "heatmap" && <ScoutHeat report={report} query={query} />}
             {tab === "economy" && <Economy report={report} />}
             {tab === "players" && <Players report={report} map={map} />}
-            {tab === "nades" && <Nades report={report} map={map} />}
-            {tab === "clips" && <ClipView key={report.matches.map((m) => m.id).join()} scope={{ map, ids: report.matches.map((m) => m.id), side: f.side, buy: f.buy }} />}
+            {tab === "nades" && scope && <Nades report={report} scope={scope} />}
+            {tab === "clips" && scope && <ClipView scope={scope} />}
           </div>
           <PrintDossier report={report} query={query} />
         </>
@@ -622,7 +627,7 @@ function Players({ report, map }: { report: ScoutReport; map: string }) {
 
 // ---- grenades ----
 
-function Nades({ report, map }: { report: ScoutReport; map: string }) {
+function Nades({ report, scope }: { report: ScoutReport; scope: ScoutScope }) {
   const rows = namedRows(report.nades);
   const top = report.cards.concat(report.more_cards).find((c) => c.key === "top_nade");
   return (
@@ -633,7 +638,7 @@ function Nades({ report, map }: { report: ScoutReport; map: string }) {
         <DataTable rows={rows} columns={["side", "type", "zone", "rounds", "per_round_pct", "median_sec"]} maxHeight={360} />
       </details>
       <h2>{t("scout.nadeLineups")}</h2>
-      <LineupsView key={report.matches.map((m) => m.id).join()} scope={{ map, ids: report.matches.map((m) => m.id) }} />
+      <LineupsView scope={scope} />
     </div>
   );
 }

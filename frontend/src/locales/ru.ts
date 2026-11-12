@@ -877,7 +877,8 @@ export const ru: Record<Key, Entry> = {
   "scout.playersHint": "Клик по игроку покажет оружие этого игрока ниже. Расстояние в игровых единицах, за первую минуту раунда.",
   "scout.weapons": "Оружие",
   "scout.weaponsOf": "Оружие: {name}",
-  "scout.nadeLineups": "Лайнапы в этих матчах",
+  "scout.nadeLineups": "Лайнапы команды в выбранных раундах",
+  "scope.fromFilters": "По фильтрам сверху: {team}, матчей: {m}, раундов: {r}. Карта, сторона и закуп выбираются там.",
 
   // ---- callouts ----
   "nav.callouts": "Позиции",

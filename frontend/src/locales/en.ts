@@ -875,7 +875,8 @@ export const en = {
   "scout.playersHint": "Click a player to see their weapons below. Distance is in game units, over the first minute of a round.",
   "scout.weapons": "Weapons",
   "scout.weaponsOf": "Weapons: {name}",
-  "scout.nadeLineups": "Lineups in these matches",
+  "scout.nadeLineups": "The team's lineups in the selected rounds",
+  "scope.fromFilters": "From the filters above: {team}, matches: {m}, rounds: {r}. Map, side and buy are chosen there.",
 
   // ---- callouts ----
   "nav.callouts": "Callouts",
