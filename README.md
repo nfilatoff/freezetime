@@ -266,18 +266,18 @@ What's on the map:
 - **Throw point** — a ring in the grenade's color where the thrower stood, shown while the grenade flies and for 6 s after the throw. Hovering shows who threw it, a click copies `setpos` / `setang` with the real pitch and yaw of the throw (the grenade's `weapon_fire`). **Smokes and fires** carry a countdown: a ring that empties clockwise around the seconds left, on a disc in the thrower's side color (the side comes from the grenade whose flight ends where the cloud or fire appears). A **flash** leaves a dashed ring with a dot in the thrower's color for 3 s where it popped (the "flashes" checkbox). The timeline under the map shows every grenade at its throw: the fill is the grenade, the ring is the side; hovering names the thrower.
 - **Drawing** — "✎ Draw" (or D) turns the map into a whiteboard: pencil, arrow (Shift snaps to 45°) and eraser, five colors, undo and clear. The right mouse button erases. Drawings stay in place between rounds of the match, are not saved to disk, and go along with "⧉ To board". While drawing, clicks on death spots and throw points are off.
 
-Replay controls:
+Replay controls (the mouse wheel zooms the radar around the pointer and dragging moves it — names, smokes and drawings zoom with it, player icons keep their size; 🔒 locks the view, ⟲ shows the whole radar; above the map a row of round buttons, underlined in the winner's side color with a gap at every side switch, replaces the round list):
 
 | Key | Action |
 |---|---|
-| Space | play/pause |
+| Space · hold Q · hold E | play/pause · play backwards while held · twice as fast while held |
 | ← / → | frame back/forward |
 | Shift + ← / → | ±5 s |
 | ↑ / ↓ | speed (0.25×–8×) |
 | N / P | next/previous kill |
-| [ / ] | previous/next round |
-| Home | end of freeze time |
-| 1 / 2 / 3 | upper / lower / both levels (on Nuke) |
+| [ / ] | previous/next round (in a playlist: previous/next item) |
+| Home · 0 | end of freeze time · whole radar (zoom reset) |
+| 1 / 2 / 3 | upper / lower / both levels (on Nuke); the middle mouse button cycles them |
 | D | drawing on/off |
 | 1 / 2 / 3 while drawing | pencil / arrow / eraser |
 | Ctrl + Z, C, Esc while drawing | undo, clear, stop drawing |

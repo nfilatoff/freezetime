@@ -281,7 +281,8 @@ export function PlaylistPlayer({ id, index }: { id: string; index: number }) {
         <div className="pl-play-main">
           {match ? (
             <ReplayView key={`${pl.id}-${item.id}`} match={match} round={item.round} at={item.start ?? undefined} until={item.end}
-              autoplay onEnd={() => auto && setTimeout(next, 800)} />
+              autoplay onEnd={() => auto && setTimeout(next, 800)}
+              onPrev={() => i > 0 && go("playlist", pl.id, i - 1)} onNext={next} />
           ) : t("common.loading")}
         </div>
         <ol className="pl-queue">

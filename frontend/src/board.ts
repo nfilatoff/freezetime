@@ -548,7 +548,8 @@ export function drawBoard(ctx: Ctx, assets: MapAssets, b: Board, o: BoardDrawOpt
 }
 
 /** Loose marks over something already drawn (the sketch over the replay): the same panels as `drawBoard`. */
-export function drawMarks(ctx: Ctx, meta: MapMeta, marks: BoardMark[], levels: number[], size: number) {
+/** `view` (replay zoom): `z` times, radar px (x, y) at each panel's top-left corner. */
+export function drawMarks(ctx: Ctx, meta: MapMeta, marks: BoardMark[], levels: number[], size: number, view?: { z: number; x: number; y: number }) {
   const k = size / RADAR_SIZE;
   levels.forEach((li, panel) => {
     ctx.save();
@@ -556,6 +557,10 @@ export function drawMarks(ctx: Ctx, meta: MapMeta, marks: BoardMark[], levels: n
     ctx.rect(panel * size, 0, size, size);
     ctx.clip();
     ctx.translate(panel * size, 0);
+    if (view && view.z !== 1) {
+      ctx.scale(view.z, view.z);
+      ctx.translate(-view.x * k, -view.y * k);
+    }
     ctx.scale(k, k);
     for (const m of marks) if (m.l === li) drawMark(ctx, m, meta, 1);
     ctx.restore();

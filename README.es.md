@@ -266,18 +266,18 @@ Qué hay en el mapa:
 - **Punto de lanzamiento** — un anillo del color de la granada donde estaba quien la lanzó; se ve mientras la granada vuela y 6 s después del lanzamiento. Al pasar el cursor se muestra quién la lanzó, y un clic copia `setpos` / `setang` con los ángulos reales del lanzamiento (el `weapon_fire` de la granada). **Humos y fuegos** muestran una cuenta atrás: un anillo que se vacía en sentido horario alrededor de los segundos restantes, sobre un disco del color del lado de quien la lanzó (el lado sale de la granada cuyo vuelo termina donde aparece la nube o el fuego). Un **flash** deja durante 3 s un anillo discontinuo con un punto del color de quien lo lanzó donde explotó (casilla «flashes»). La línea de tiempo bajo el mapa marca cada granada en su lanzamiento: el relleno es la granada, el borde el lado; al pasar el cursor se ve quién la lanzó.
 - **Dibujo** — «✎ Dibujar» (o D) convierte el mapa en una pizarra: lápiz, flecha (Shift ajusta a 45°) y goma, cinco colores, deshacer y limpiar. El botón derecho del ratón borra. Los dibujos se mantienen en su sitio entre rondas de la partida, no se guardan en disco y pasan a la pizarra con «⧉ A la pizarra». Mientras se dibuja, los clics en los lugares de muerte y en los puntos de lanzamiento están desactivados.
 
-Controles de la repetición:
+Controles de la repetición (la rueda del ratón acerca el radar alrededor del cursor y arrastrar lo mueve — nombres, humos y dibujos se acercan con él, los iconos de jugadores mantienen su tamaño; 🔒 fija la vista, ⟲ muestra todo el radar; sobre el mapa, en lugar de la lista de rondas, una fila de botones subrayados con el color del lado ganador y un hueco en cada cambio de lado):
 
 | Tecla | Acción |
 |---|---|
-| Espacio | reproducir/pausa |
+| Espacio · mantener Q · mantener E | reproducir/pausa · hacia atrás mientras se mantiene · al doble mientras se mantiene |
 | ← / → | fotograma atrás/adelante |
 | Shift + ← / → | ±5 s |
 | ↑ / ↓ | velocidad (0,25×–8×) |
 | N / P | kill siguiente/anterior |
-| [ / ] | ronda anterior/siguiente |
-| Home | fin del freezetime |
-| 1 / 2 / 3 | nivel superior / inferior / ambos (en Nuke) |
+| [ / ] | ronda anterior/siguiente (en una playlist: elemento anterior/siguiente) |
+| Home · 0 | fin del freezetime · todo el radar (restablecer zoom) |
+| 1 / 2 / 3 | nivel superior / inferior / ambos (en Nuke); el botón central del ratón los recorre |
 | D | activar/desactivar el dibujo |
 | 1 / 2 / 3 al dibujar | lápiz / flecha / goma |
 | Ctrl + Z, C, Esc al dibujar | deshacer, limpiar, dejar de dibujar |

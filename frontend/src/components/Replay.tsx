@@ -5,7 +5,8 @@ import { PEN_COLORS, PEN_WIDTHS, boardFromFrame, drawMarks, emptyBoard, hitTest,
 import { useFitHeight } from "../fit";
 import { CT_COLOR, RADAR_SIZE, T_COLOR, levelLabel, levelOf, panelLevels, sideColor, sideShort, useMapAssets, worldToPx } from "../radar";
 import {
-  BOMB_TIME, NADE_COLORS, ROUND_TIME, bombState, drawRound, fmtClock, frameAt, killAt, loadReplay, playerStates, throwAt, weaponName, type PlayerState,
+  BOMB_TIME, NADE_COLORS, NO_VIEW, ROUND_TIME, bombState, drawRound, fmtClock, frameAt, killAt, loadReplay, panBy, playerStates, throwAt, toRadar, weaponName, zoomAt,
+  type PlayerState, type View,
 } from "../replayDraw";
 import { useCalloutMode } from "../callouts";
 import { reasonLabel, t, td, type Key } from "../i18n";
@@ -30,13 +31,19 @@ const setpos = (x: number, y: number, z: number, pitch: number, yaw: number) =>
   `setpos ${num(x)} ${num(y)} ${num(z)}; setang ${num(pitch)} ${num(yaw)} 0`;
 
 // ---- component ----
-export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
+const ZOOM_STEP = 1.2; // per wheel notch
+const PAN_START_PX = 4; // a press that moves less is a click
+
+export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, onNext }: {
   match: MatchOverview;
   round: number;
   at?: number;
   until?: number | null; // stop here (seconds after the freeze end) and call onEnd: playlist playback
   onEnd?: () => void;
   autoplay?: boolean;
+  // playlist playback: [ and ] (and the arrow buttons) go to the previous / next item instead of the match's rounds
+  onPrev?: () => void;
+  onNext?: () => void;
 }) {
   const { assets, error: mapError } = useMapAssets(match.map);
   const [data, setData] = useState<Replay | null>(null);
@@ -46,6 +53,12 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
   const [speed, setSpeed] = useState(1);
   const [view, setView] = useState<number | "all">("all");
   const [opts, setOpts] = useState({ names: true, weapons: false, trails: true, shots: true, flashMarks: true });
+  const [zoom, setZoom] = useState<View>(NO_VIEW); // the same for every round of the match
+  const [zoomLocked, setZoomLocked] = useState(false);
+  const pan = useRef<{ x: number; y: number; from: View; moved: boolean } | null>(null);
+  const panned = useRef(false); // the click that ends a drag does nothing
+  const [hold, setHold] = useState<"back" | "fast" | null>(null); // Q held: play backwards, E held: twice as fast
+  const [stage, setStage] = useState<HTMLDivElement | null>(null);
   const callouts = useCalloutMode();
   const [hover, setHover] = useState<{ kill: number; x: number; y: number } | null>(null);
   const [hoverThrow, setHoverThrow] = useState<{ g: number; x: number; y: number } | null>(null);
@@ -75,6 +88,14 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
 
   const rounds = match.timeline.map((r) => r.round);
   const roundIdx = rounds.indexOf(round);
+  const prevRound = () => {
+    if (onPrev) onPrev();
+    else if (roundIdx > 0) go("match", match.id, "replay", rounds[roundIdx - 1]);
+  };
+  const nextRound = () => {
+    if (onNext) onNext();
+    else if (rounds[roundIdx + 1] !== undefined) go("match", match.id, "replay", rounds[roundIdx + 1]);
+  };
 
   useEffect(() => {
     setData(null);
@@ -149,23 +170,30 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawRound(ctx, assets, data, tickRef.current, levels, size, {
-      ...opts, callouts: callouts !== "off", hoverKill: hover?.kill ?? -1, throwPoints: true, hoverThrow: hoverThrow?.g ?? -1,
+      ...opts, callouts: callouts !== "off", hoverKill: hover?.kill ?? -1, throwPoints: true, hoverThrow: hoverThrow?.g ?? -1, view: zoom,
     });
     const draft = stroke.current?.mark;
-    drawMarks(ctx, assets.meta, draft ? [...marksRef.current, draft] : marksRef.current, levels, size);
+    drawMarks(ctx, assets.meta, draft ? [...marksRef.current, draft] : marksRef.current, levels, size, zoom);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assets, data, size, levels.join(","), opts, callouts, hover?.kill, hoverThrow?.g, marks]);
+  }, [assets, data, size, levels.join(","), opts, callouts, hover?.kill, hoverThrow?.g, marks, zoom]);
 
   useEffect(render, [render, uiTick]);
 
   // playback loop
   useEffect(() => {
-    if (!playing || !data) return;
+    if ((!playing && !hold) || !data) return;
     let raf = 0, last = performance.now(), lastUi = 0;
     const stop = until != null ? Math.min(data.last_tick, data.freeze_end_tick + until * data.tick_rate) : data.last_tick;
+    const rate = (hold === "back" ? -1 : 1) * (hold === "fast" ? 2 : 1) * speed;
     const frame = (now: number) => {
-      tickRef.current += ((now - last) / 1000) * data.tick_rate * speed;
+      tickRef.current += ((now - last) / 1000) * data.tick_rate * rate;
       last = now;
+      if (hold === "back" && tickRef.current <= data.start_tick) {
+        tickRef.current = data.start_tick;
+        render();
+        setUiTick(tickRef.current);
+        return; // stays at the start while Q is held
+      }
       if (tickRef.current >= stop) {
         tickRef.current = stop;
         setPlaying(false);
@@ -183,7 +211,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [playing, speed, data, render, until]);
+  }, [playing, hold, speed, data, render, until]);
 
   const seek = useCallback(
     (t: number) => {
@@ -230,12 +258,18 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
     const k = size / RADAR_SIZE;
     const multi = assets.meta.levels.length > 1;
     const P = (wx: number, wy: number) => worldToPx(assets.meta, wx, wy);
-    const i = killAt(data.kills, tickRef.current, P, (x - panel * size) / k, y / k, 1 / k, (kill) => !multi || levelOf(assets.meta, kill.vz) === li);
+    const [rx, ry] = toRadar(zoom, k, x - panel * size, y);
+    const s = 1 / (k * zoom.z);
+    const i = killAt(data.kills, tickRef.current, P, rx, ry, s, (kill) => !multi || levelOf(assets.meta, kill.vz) === li);
     setHover(i >= 0 ? { kill: i, x, y } : null);
-    const g = i >= 0 ? -1 : throwAt(data, tickRef.current, P, (x - panel * size) / k, y / k, 1 / k, (z) => !multi || levelOf(assets.meta, z) === li);
+    const g = i >= 0 ? -1 : throwAt(data, tickRef.current, P, rx, ry, s, (z) => !multi || levelOf(assets.meta, z) === li);
     setHoverThrow(g >= 0 ? { g, x, y } : null);
   };
   const onStageClick = () => {
+    if (panned.current) {
+      panned.current = false;
+      return;
+    }
     if (drawing || !data) return;
     const thrown = hoverThrow && data.grenades[hoverThrow.g]?.throw;
     if (thrown) return copy(setpos(thrown.x, thrown.y, thrown.z, thrown.pitch, thrown.yaw));
@@ -251,15 +285,27 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
     const x = e.clientX - box.left, y = e.clientY - box.top;
     const panel = Math.floor(x / size);
     if (panel < 0 || panel >= levels.length || y < 0 || y > size) return null;
-    const k = size / RADAR_SIZE;
-    return { x: (x - panel * size) / k, y: y / k, l: levels[panel] };
+    const [rx, ry] = toRadar(zoom, size / RADAR_SIZE, x - panel * size, y);
+    return { x: rx, y: ry, l: levels[panel] };
   };
   const eraseAt = (p: BoardPos) => {
     if (!assets) return;
-    const h = hitTest({ ...emptyBoard(match.map), marks: marksRef.current }, assets.meta, 0, p.l, p.x, p.y, 8 * (RADAR_SIZE / size), null);
+    const h = hitTest({ ...emptyBoard(match.map), marks: marksRef.current }, assets.meta, 0, p.l, p.x, p.y, (8 * RADAR_SIZE) / (size * zoom.z), null);
     if (h) setMarks(marksRef.current.filter((m) => m.id !== h.id));
   };
+  const multiLevel = !!assets && assets.meta.levels.length > 1;
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button === 1) {
+      // middle button: the next level of a two-level map
+      e.preventDefault();
+      if (multiLevel) setView((v) => (v === "all" ? 0 : v === 0 ? 1 : "all"));
+      return;
+    }
+    if (!drawing && e.button === 0 && zoom.z > 1 && !zoomLocked) {
+      pan.current = { x: e.clientX, y: e.clientY, from: zoom, moved: false };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
     if (!drawing || (e.button !== 0 && e.button !== 2)) return;
     const p = locate(e);
     if (!p) return;
@@ -273,6 +319,14 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
     }
   };
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const pn = pan.current;
+    if (pn) {
+      const dx = e.clientX - pn.x, dy = e.clientY - pn.y;
+      if (!pn.moved && Math.hypot(dx, dy) < PAN_START_PX) return;
+      pn.moved = true;
+      setZoom(panBy(pn.from, dx, dy, size / RADAR_SIZE));
+      return;
+    }
     const st = stroke.current;
     const p = st && locate(e);
     if (!st || !p) return;
@@ -282,6 +336,11 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
     render();
   };
   const onPointerUp = () => {
+    if (pan.current) {
+      panned.current = pan.current.moved;
+      pan.current = null;
+      return;
+    }
     const st = stroke.current;
     stroke.current = null;
     if (!st) return;
@@ -291,6 +350,42 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
     } else if (strayMark(st.mark)) render();
     else commitMarks([...marksRef.current, st.mark], st.start);
   };
+
+  // wheel: zoom around the pointer (a non-passive listener, so the page does not scroll)
+  useEffect(() => {
+    if (!stage) return;
+    const onWheel = (e: WheelEvent) => {
+      if (zoomLocked || !assets) return;
+      e.preventDefault();
+      const box = stage.getBoundingClientRect();
+      const x = e.clientX - box.left, y = e.clientY - box.top;
+      const panel = Math.floor(x / size);
+      if (panel < 0 || panel >= levels.length) return;
+      const k = size / RADAR_SIZE;
+      setZoom((v) => {
+        const [rx, ry] = toRadar(v, k, x - panel * size, y);
+        return zoomAt(v, e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP, rx, ry);
+      });
+    };
+    stage.addEventListener("wheel", onWheel, { passive: false });
+    return () => stage.removeEventListener("wheel", onWheel);
+  }, [stage, zoomLocked, assets, size, levels.length]);
+  useEffect(() => setZoom(NO_VIEW), [match.map]);
+
+  // Q / E held: backwards / twice as fast, until the key is let go
+  useEffect(() => {
+    const up = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      if (key === "q" || key === "e" || key === "й" || key === "у") setHold(null);
+    };
+    const blur = () => setHold(null);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", blur);
+    return () => {
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", blur);
+    };
+  }, []);
 
   const changeSpeed = (dir: number) =>
     setSpeed((s) => SPEEDS[Math.max(0, Math.min(SPEEDS.length - 1, SPEEDS.indexOf(s) + dir))]);
@@ -311,6 +406,12 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
       if (key === "d") {
         e.preventDefault();
         return setDrawing((d) => !d);
+      }
+      // by the physical key, so the Russian layout works too
+      if (e.code === "KeyQ" || e.code === "KeyE") {
+        e.preventDefault();
+        if (!e.repeat) setHold(e.code === "KeyQ" ? "back" : "fast");
+        return;
       }
       if (drawing) {
         // while drawing, 1/2/3 pick a tool instead of a level
@@ -334,8 +435,9 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
         case "n": case "N": case "k": case "K": jumpKill(1); break;
         case "p": case "P": case "j": case "J": jumpKill(-1); break;
         case "Home": seek(data.freeze_end_tick); break;
-        case "]": if (rounds[roundIdx + 1] !== undefined) go("match", match.id, "replay", rounds[roundIdx + 1]); break;
-        case "[": if (roundIdx > 0) go("match", match.id, "replay", rounds[roundIdx - 1]); break;
+        case "]": nextRound(); break;
+        case "[": prevRound(); break;
+        case "0": setZoom(NO_VIEW); break;
         case "1": setView(0); break;
         case "2": if (assets && assets.meta.levels.length > 1) setView(1); break;
         case "3": setView("all"); break;
@@ -346,7 +448,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, seek, stepFrame, jumpKill, roundIdx, assets, drawing, undoMark, clearMarks]);
+  }, [data, seek, stepFrame, jumpKill, roundIdx, assets, drawing, undoMark, clearMarks, onPrev, onNext]);
 
   const states = useMemo(() => (data ? playerStates(data, uiTick) : []), [data, uiTick]);
   const copyPlayer = (s: PlayerState) => copy(setpos(s.x, s.y, s.z, 0, s.yaw ?? 0));
@@ -361,15 +463,9 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
   return (
     <div className="replay">
       <div className="replay-top">
-        <button disabled={roundIdx <= 0} onClick={() => go("match", match.id, "replay", rounds[roundIdx - 1])}>◀ [</button>
-        <select value={round} onChange={(e) => go("match", match.id, "replay", e.target.value)}>
-          {match.timeline.map((r) => (
-            <option key={r.round} value={r.round}>
-              {t("replay.roundOpt", { round: r.round, winner: r.winner ?? sideShort(r.winner_side), reason: reasonLabel(r.reason) })}
-            </option>
-          ))}
-        </select>
-        <button disabled={roundIdx >= rounds.length - 1} onClick={() => go("match", match.id, "replay", rounds[roundIdx + 1])}>] ▶</button>
+        <button disabled={!onPrev && roundIdx <= 0} onClick={prevRound} title={onPrev ? t("pl.prev") : undefined}>◀ [</button>
+        {!onNext && <RoundStrip match={match} round={round} />}
+        <button disabled={!onNext && roundIdx >= rounds.length - 1} onClick={nextRound} title={onNext ? t("pl.next") : undefined}>] ▶</button>
         {data && <Clock r={data} tick={uiTick} />}
         {loadMs !== null && <span className="muted small">{t("replay.loaded", { ms: loadMs })}{data?.low_res ? t("replay.lowRes") : ""}</span>}
         <span className="grow" />
@@ -387,6 +483,14 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
         <label className="small"><input type="checkbox" checked={opts.shots} onChange={(e) => setOpts({ ...opts, shots: e.target.checked })} /> {t("replay.shots")}</label>
         <label className="small" title={t("replay.flashMarksTitle")}><input type="checkbox" checked={opts.flashMarks} onChange={(e) => setOpts({ ...opts, flashMarks: e.target.checked })} /> {t("replay.flashMarks")}</label>
         <CalloutToggle meta={assets?.meta} />
+        <span className="seg zoom-ctl">
+          <button className={zoomLocked ? "on" : ""} title={t("replay.zoomLockTitle")} onClick={() => setZoomLocked((v) => !v)}>
+            {zoomLocked ? "🔒" : "🔓"}
+          </button>
+          <button disabled={zoom.z === 1} title={t("replay.zoomResetTitle")} onClick={() => setZoom(NO_VIEW)}>
+            {t("replay.zoomReset", { z: zoom.z.toFixed(1) })}
+          </button>
+        </span>
       </div>
 
       <div className="replay-body">
@@ -396,8 +500,13 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
             <div className="muted" style={{ height: size }}>{t("replay.loadingRound")}</div>
           ) : (
             <div
+              ref={setStage}
               className={drawing ? "replay-canvas drawing" : "replay-canvas"}
-              style={{ position: "relative", width, height: size, cursor: drawing ? undefined : hover || hoverThrow ? "pointer" : undefined }}
+              style={{
+                position: "relative", width, height: size,
+                cursor: drawing ? undefined : hover || hoverThrow ? "pointer" : zoom.z > 1 && !zoomLocked ? (pan.current?.moved ? "grabbing" : "grab") : undefined,
+              }}
+              onAuxClick={(e) => e.button === 1 && e.preventDefault()}
               onMouseMove={onStageMove}
               onMouseLeave={() => {
                 setHover(null);
@@ -528,6 +637,27 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
         </>
       )}
     </div>
+  );
+}
+
+/** Round buttons: the bar under each is the winner's side colour; a gap marks a side switch (halves, overtime). */
+function RoundStrip({ match, round }: { match: MatchOverview; round: number }) {
+  const tl = match.timeline;
+  const switched = (i: number) => i > 0 && Object.keys(tl[i].teams).some((team) => tl[i - 1].teams[team] && tl[i - 1].teams[team].side !== tl[i].teams[team].side);
+  return (
+    <span className="round-strip">
+      {tl.map((r, i) => (
+        <button
+          key={r.round}
+          className={`${r.round === round ? "on" : ""} ${switched(i) ? "half" : ""}`}
+          style={{ borderBottomColor: sideColor(r.winner_side) }}
+          title={t("replay.roundOpt", { round: r.round, winner: r.winner ?? sideShort(r.winner_side), reason: reasonLabel(r.reason) })}
+          onClick={() => go("match", match.id, "replay", r.round)}
+        >
+          {r.round}
+        </button>
+      ))}
+    </span>
   );
 }
 

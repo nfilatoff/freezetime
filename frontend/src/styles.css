@@ -258,6 +258,12 @@ tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 
 /* ---------- Replay ---------- */
 .replay-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+/* round buttons: winner's side colour underneath, a gap at each side switch */
+.round-strip { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+.round-strip button { min-width: 26px; padding: 2px 4px; font-size: 12px; border-bottom: 3px solid #666; border-radius: 4px; }
+.round-strip button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); border-bottom-color: inherit; }
+.round-strip button.half { margin-left: 10px; }
+.zoom-ctl button { min-width: 34px; }
 .clock { font: 700 20px var(--head); font-variant-numeric: tabular-nums; min-width: 90px; }
 .clock.bomb { color: var(--err); }
 .clock.defused { color: var(--ok); }

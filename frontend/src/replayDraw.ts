@@ -570,6 +570,35 @@ export interface RoundDrawOpts {
   levelLabels?: boolean; // level names in the panel corner (default true)
   callouts?: boolean; // position names over the radar, under everything else
   flashMarks?: boolean; // where flashes popped, for a few seconds (default true)
+  view?: View; // zoom and pan, the same for every panel (default: the whole radar)
+}
+
+// ---- zoom and pan of a radar panel ----
+/** `z` times the whole radar, with radar px (x, y) at the panel's top-left corner. */
+export interface View { z: number; x: number; y: number }
+export const NO_VIEW: View = { z: 1, x: 0, y: 0 };
+export const MAX_ZOOM = 8;
+
+function clampView(v: View): View {
+  const z = Math.max(1, Math.min(MAX_ZOOM, v.z));
+  const room = RADAR_SIZE - RADAR_SIZE / z; // how far the corner may move
+  return { z, x: Math.max(0, Math.min(room, v.x)), y: Math.max(0, Math.min(room, v.y)) };
+}
+/** Zoom by `factor` keeping radar point (rx, ry) under the same screen spot. */
+export function zoomAt(v: View, factor: number, rx: number, ry: number): View {
+  const z = Math.max(1, Math.min(MAX_ZOOM, v.z * factor));
+  return clampView({ z, x: rx - ((rx - v.x) * v.z) / z, y: ry - ((ry - v.y) * v.z) / z });
+}
+/** Move the view by a screen distance (px), `k` being screen px per radar px at zoom 1. */
+export const panBy = (v: View, dx: number, dy: number, k: number): View =>
+  clampView({ ...v, x: v.x - dx / (k * v.z), y: v.y - dy / (k * v.z) });
+/** Radar px under a screen point of a panel (px from the panel's top-left corner). */
+export const toRadar = (v: View, k: number, sx: number, sy: number): [number, number] => [v.x + sx / (k * v.z), v.y + sy / (k * v.z)];
+/** Apply a view to a context already translated to the panel's corner; `k` = screen px per radar px. */
+export function applyView(ctx: Ctx, v: View, k: number) {
+  if (v.z === 1 && v.x === 0 && v.y === 0) return;
+  ctx.scale(v.z, v.z);
+  ctx.translate(-v.x * k, -v.y * k);
 }
 
 /** One radar panel per entry of `levels`, `size` px each, side by side from x = 0. */
@@ -579,17 +608,19 @@ export function drawRound(ctx: CanvasRenderingContext2D, assets: MapAssets, r: R
   const bomb = bombState(r, tick);
   const multi = meta.levels.length > 1;
   const k = size / RADAR_SIZE; // screen px per radar px
-  const s = 1 / k; // radar px per screen px
+  const view = opts.view ?? NO_VIEW;
+  const s = 1 / (k * view.z); // radar px per screen px: icons keep their size when zoomed in
 
   levels.forEach((li, panel) => {
     const ox = panel * size;
-    drawRadar(ctx, images[li], ox, size);
-    if (opts.callouts) drawCallouts(ctx, meta, li, ox, size);
     ctx.save();
     ctx.beginPath();
     ctx.rect(ox, 0, size, size);
     ctx.clip();
     ctx.translate(ox, 0);
+    applyView(ctx, view, k); // the radar, its names and everything on it zoom together
+    drawRadar(ctx, images[li], 0, size);
+    if (opts.callouts) drawCallouts(ctx, meta, li, 0, size);
     ctx.scale(k, k);
     const vis = (z: number | null | undefined) => (!multi || levelOf(meta, z) === li ? 1 : 0.15);
     const P = (x: number, y: number) => worldToPx(meta, x, y);
