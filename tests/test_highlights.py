@@ -2,7 +2,7 @@ import shutil
 
 import pytest
 
-from freezetime.highlights import CLUTCH_TAIL_SEC, TAIL_SEC, add_custom, delete_custom, highlights, load_custom
+from freezetime.highlights import CLUTCH_TAIL_SEC, QUICK_SEC, TAIL_SEC, add_custom, delete_custom, highlights, load_custom
 
 
 def test_auto_highlights(dust2_mini):
@@ -42,3 +42,12 @@ def test_custom_highlights(dust2_mini, tmp_path):
     assert delete_custom(d, h["id"])
     assert not delete_custom(d, h["id"])
     assert load_custom(d) == []
+
+
+def test_quick_double_allows_four_seconds_between_kills(dust2_mini):
+    assert QUICK_SEC == 4.0  # 3 s missed a real double: an HE and a pistol kill 3.25 s apart
+    for h in highlights(dust2_mini):
+        gaps = [b - a for a, b in zip(h["kill_secs"], h["kill_secs"][1:])]
+        if h["kind"] == "double":
+            assert len(h["kill_secs"]) == 2 and gaps[0] <= QUICK_SEC + 0.02
+        assert ("quick" in h["tags"]) == any(g <= QUICK_SEC + 0.02 for g in gaps)
