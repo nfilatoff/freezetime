@@ -491,6 +491,58 @@ export function throwAt(r: Replay, tick: number, P: ToPx, rx: number, ry: number
   return best;
 }
 
+const TIMER_R = 8.5; // screen px
+
+/** The countdown on a smoke or a fire: a ring that empties clockwise around the seconds left,
+ *  on a disc in the thrower's side colour. */
+export function drawAreaTimer(ctx: Ctx, kind: "smoke" | "fire", px: number, py: number, s: number, left: number, total: number, side: string | null | undefined, alpha: number) {
+  const r = TIMER_R * s;
+  const frac = Math.max(0, Math.min(1, total > 0 ? left / total : 0));
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = side ? sideColor(side) : "#9aa0a6";
+  ctx.strokeStyle = "rgba(0,0,0,0.75)";
+  ctx.lineWidth = 3.4 * s;
+  ctx.beginPath();
+  ctx.arc(px, py, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke(); // dark track under the ring
+  ctx.strokeStyle = kind === "smoke" ? "#f4f4f4" : "#ff7a1a";
+  ctx.lineWidth = 2.2 * s;
+  ctx.beginPath();
+  ctx.arc(px, py, r, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = "#111";
+  ctx.font = `bold ${9 * s}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(String(Math.max(0, Math.ceil(left))), px, py + 0.5 * s);
+  ctx.textBaseline = "alphabetic";
+  ctx.globalAlpha = 1;
+}
+
+export const FLASH_MARK_SEC = 3; // a flash's mark stays this long after it pops
+
+/** Where a flash popped: a fading white ring with a dot in the thrower's colour. */
+export function drawFlashMark(ctx: Ctx, px: number, py: number, s: number, side: string | null | undefined, age: number, alpha: number) {
+  const fade = 1 - Math.min(1, age / FLASH_MARK_SEC);
+  ctx.globalAlpha = alpha * (0.35 + 0.65 * fade);
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 1.8 * s;
+  ctx.setLineDash([2.5 * s, 2 * s]);
+  ctx.beginPath();
+  ctx.arc(px, py, 7 * s, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = side ? sideColor(side) : "#fff";
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 1 * s;
+  ctx.beginPath();
+  ctx.arc(px, py, 2.6 * s, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
 /** A smoke cloud or a fire area, fading in and out over its lifetime. */
 export function drawArea(ctx: Ctx, kind: "smoke" | "fire", x: number, y: number, P: ToPx, scale: number, alpha: number) {
   const [px, py] = P(x, y);
@@ -517,6 +569,7 @@ export interface RoundDrawOpts {
   focus?: Set<string>; // players drawn with a ring and a bold name (highlights)
   levelLabels?: boolean; // level names in the panel corner (default true)
   callouts?: boolean; // position names over the radar, under everything else
+  flashMarks?: boolean; // where flashes popped, for a few seconds (default true)
 }
 
 /** One radar panel per entry of `levels`, `size` px each, side by side from x = 0. */
@@ -541,22 +594,33 @@ export function drawRound(ctx: CanvasRenderingContext2D, assets: MapAssets, r: R
     const vis = (z: number | null | undefined) => (!multi || levelOf(meta, z) === li ? 1 : 0.15);
     const P = (x: number, y: number) => worldToPx(meta, x, y);
 
-    // smokes and fires with their real lifetimes
+    // smokes and fires with their real lifetimes; the countdowns go on top of both, so a fire under a smoke still shows its timer
+    const timers: [ "smoke" | "fire", (typeof r.smokes)[number]][] = [];
     for (const a of r.smokes) {
       if (tick < a.start || tick > a.end) continue;
       const fadeIn = Math.min(1, (tick - a.start) / r.tick_rate);
       const fadeOut = Math.min(1, (a.end - tick) / (2 * r.tick_rate));
       drawArea(ctx, "smoke", a.x, a.y, P, meta.scale, Math.min(fadeIn, fadeOut) * vis(a.z));
-      const [px, py] = P(a.x, a.y);
-      ctx.globalAlpha = vis(a.z);
-      ctx.fillStyle = "#222";
-      ctx.font = `${10 * s}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.fillText(String(Math.ceil((a.end - tick) / r.tick_rate)), px, py + 4 * s);
-      ctx.globalAlpha = 1;
+      timers.push(["smoke", a]);
     }
     for (const a of r.fires) {
-      if (tick >= a.start && tick <= a.end) drawArea(ctx, "fire", a.x, a.y, P, meta.scale, vis(a.z));
+      if (tick < a.start || tick > a.end) continue;
+      drawArea(ctx, "fire", a.x, a.y, P, meta.scale, vis(a.z));
+      timers.push(["fire", a]);
+    }
+    for (const [kind, a] of timers) {
+      const [px, py] = P(a.x, a.y);
+      drawAreaTimer(ctx, kind, px, py, s, (a.end - tick) / r.tick_rate, (a.end - a.start) / r.tick_rate, a.side, vis(a.z));
+    }
+
+    // where flashes popped in the last few seconds
+    if (opts.flashMarks !== false) {
+      for (const g of r.grenades) {
+        if (g.type !== "flashbang" || tick <= g.end || tick > g.end + FLASH_MARK_SEC * r.tick_rate) continue;
+        const last = g.t.length - 1;
+        const [px, py] = P(g.x[last], g.y[last]);
+        drawFlashMark(ctx, px, py, s, g.side, (tick - g.end) / r.tick_rate, vis(g.z[last]));
+      }
     }
 
     // grenades in flight, with the path so far

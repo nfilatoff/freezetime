@@ -57,3 +57,23 @@ def test_grenades_carry_the_release(dust2_mini):
         # the release is where the path starts: next to the thrower
         assert ((t["x"] - g["x"][0]) ** 2 + (t["y"] - g["y"][0]) ** 2) ** 0.5 <= 160
     json.dumps(doc["grenades"])
+
+
+def test_smokes_and_fires_know_their_thrower_side(dust2_mini):
+    m = load_match(dust2_mini, extra_tables=("smokes", "fires", "grenades", "blinds", "shots", "damages"))
+    for rn in (3, 5):
+        doc = build_round(m, rn)
+        sides = {p["steamid"]: p["side"] for p in doc["players"]}
+        for kind in ("smokes", "fires"):
+            areas = doc[kind]
+            assert areas and all({"thrower", "side"} <= set(a) for a in areas)
+            # every area in the fixture rounds starts where a grenade's path ends, so each gets a side
+            assert all(a["side"] in ("terrorist", "counter-terrorist") for a in areas)
+            for a in areas:
+                if a["thrower"] in sides:
+                    assert sides[a["thrower"]] == a["side"]
+    # a smoke with no grenade ending there stays unowned
+    from freezetime.replay import _owned
+
+    lone = _owned([{"start": 100, "end": 200, "x": 0, "y": 0, "z": 0}], [], {"smoke"}, 64)
+    assert lone[0]["side"] is None and lone[0]["thrower"] is None

@@ -478,6 +478,8 @@ export interface ReplayArea {
   x: number;
   y: number;
   z: number;
+  thrower: string | null; // from the grenade whose flight ends where the area appears
+  side: Side | null;
 }
 
 export interface ReplayKill {

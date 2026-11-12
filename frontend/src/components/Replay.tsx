@@ -8,7 +8,7 @@ import {
   BOMB_TIME, NADE_COLORS, ROUND_TIME, bombState, drawRound, fmtClock, frameAt, killAt, loadReplay, playerStates, throwAt, weaponName, type PlayerState,
 } from "../replayDraw";
 import { useCalloutMode } from "../callouts";
-import { reasonLabel, t, type Key } from "../i18n";
+import { reasonLabel, t, td, type Key } from "../i18n";
 import { CalloutToggle } from "./CalloutToggle";
 import { ToolIcon } from "./Icons";
 import { KillCard } from "./KillCard";
@@ -45,7 +45,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [view, setView] = useState<number | "all">("all");
-  const [opts, setOpts] = useState({ names: true, weapons: false, trails: true, shots: true });
+  const [opts, setOpts] = useState({ names: true, weapons: false, trails: true, shots: true, flashMarks: true });
   const callouts = useCalloutMode();
   const [hover, setHover] = useState<{ kill: number; x: number; y: number } | null>(null);
   const [hoverThrow, setHoverThrow] = useState<{ g: number; x: number; y: number } | null>(null);
@@ -385,6 +385,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay }: {
         <label className="small"><input type="checkbox" checked={opts.weapons} onChange={(e) => setOpts({ ...opts, weapons: e.target.checked })} /> {t("replay.weapons")}</label>
         <label className="small"><input type="checkbox" checked={opts.trails} onChange={(e) => setOpts({ ...opts, trails: e.target.checked })} /> {t("replay.trails")}</label>
         <label className="small"><input type="checkbox" checked={opts.shots} onChange={(e) => setOpts({ ...opts, shots: e.target.checked })} /> {t("replay.shots")}</label>
+        <label className="small" title={t("replay.flashMarksTitle")}><input type="checkbox" checked={opts.flashMarks} onChange={(e) => setOpts({ ...opts, flashMarks: e.target.checked })} /> {t("replay.flashMarks")}</label>
         <CalloutToggle meta={assets?.meta} />
       </div>
 
@@ -632,6 +633,14 @@ function Timeline({ r, tick, onSeek, notes }: { r: Replay; tick: number; onSeek:
           className="tl-kill"
           style={{ left: pct(k.tick), background: sideColor(k.attacker_side) }}
           title={`${k.attacker_name ?? "World"} → ${k.victim_name} (${weaponName(k.weapon)})`}
+        />
+      ))}
+      {r.grenades.filter((g) => g.type !== "decoy").map((g, i) => (
+        <div
+          key={`g${i}`}
+          className={`tl-nade ${g.type}`}
+          style={{ left: pct(g.t[0]), background: NADE_COLORS[g.type] ?? "#ccc", borderColor: g.side ? sideColor(g.side) : "#888" }}
+          title={t("tl.nade", { nade: td(`nade.${g.type}`, g.type), who: r.players.find((p) => p.steamid === g.thrower)?.name ?? "?" })}
         />
       ))}
       {r.bomb.filter((b) => b.event === "finish_plant" || b.event === "defuse").map((b, i) => (

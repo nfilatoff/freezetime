@@ -3,7 +3,7 @@
 One round becomes a JSON document with a shared tick grid and per-player arrays
 (``x``, ``y``, ``z``, ``yaw``, ``hp``, ...), inventory changes, grenade trajectories (with the
 thrower's position and view angles at the release, for ``setpos``), smokes
-and fires with their real lifetimes, blinds, kills with duel details, bomb events and shots
+and fires with their real lifetimes and the thrower's side, blinds, kills with duel details, bomb events and shots
 with their direction and hit point. Documents are cached gzipped in
 ``<extract>/replay/round_<n>.v<FORMAT>.json.gz``.
 
@@ -23,7 +23,7 @@ import polars as pl
 from freezetime.context import Match, load_match
 from freezetime.lineups import MATCH_DIST, MATCH_TICKS, WEAPON_TYPE
 
-FORMAT = 5  # bump when the document changes; old cache files are then ignored
+FORMAT = 6  # bump when the document changes; old cache files are then ignored
 PRE_FREEZE_SEC = 20.0  # replay starts at most this long before freeze end
 POST_END_SEC = 4.0  # and runs this long after the round end (capped by the official end)
 GRENADE_STEP = 2  # keep every n-th tick of grenade trajectories
@@ -134,6 +134,7 @@ def build_round(m: Match, round_num: int) -> dict:
         p["inv"] = [[t, items.setdefault(inv, len(items))] for t, inv in changes] if changes else None
 
     names = {int(p["steamid"]): p["name"] for p in players}
+    grenades = _grenades(m, start, end, frames)
     return {
         "format": FORMAT,
         "map": m.map_name,
@@ -152,9 +153,9 @@ def build_round(m: Match, round_num: int) -> dict:
         "weapons": weapons,
         "items": [list(inv) for inv in items],
         "players": players,
-        "grenades": _grenades(m, start, end, frames),
-        "smokes": _areas(m.data["smokes"], start, end),
-        "fires": _areas(m.data["fires"], start, end),
+        "grenades": grenades,
+        "smokes": _owned(_areas(m.data["smokes"], start, end), grenades, {"smoke"}, rate),
+        "fires": _owned(_areas(m.data["fires"], start, end), grenades, {"molotov", "incendiary"}, rate),
         "blinds": [
             {"tick": r["tick"], "attacker": str(r["attacker_steamid"]), "victim": str(r["victim_steamid"]), "duration": round(float(r["duration"]), 2)}
             for r in _in(m.data["blinds"], "tick", start, end).iter_rows(named=True)
@@ -204,6 +205,24 @@ def _areas(df: pl.DataFrame, start: int, end: int) -> list[dict]:
         {"start": r["start_tick"], "end": r["end_tick"], "x": _r(r["x"]), "y": _r(r["y"]), "z": _r(r["z"])}
         for r in rows.sort("start_tick").iter_rows(named=True)
     ]
+
+
+AREA_MATCH_SEC = 1.0  # a smoke or fire appears where and when its grenade's flight path ends
+AREA_MATCH_DIST = 120  # world units
+
+
+def _owned(areas: list[dict], grenades: list[dict], types: set[str], rate: float) -> list[dict]:
+    """Give each smoke or fire the thrower and side of the grenade whose path ends there (the tables carry none)."""
+    for a in areas:
+        best = None
+        for g in grenades:
+            if g["type"] not in types or abs(a["start"] - g["end"]) > AREA_MATCH_SEC * rate:
+                continue
+            d = ((g["x"][-1] - a["x"]) ** 2 + (g["y"][-1] - a["y"]) ** 2) ** 0.5
+            if d <= AREA_MATCH_DIST and (best is None or d < best[0]):
+                best = d, g
+        a["thrower"], a["side"] = (best[1]["thrower"], best[1]["side"]) if best else (None, None)
+    return areas
 
 
 def _grenades(m: Match, start: int, end: int, frames: pl.DataFrame) -> list[dict]:
