@@ -64,6 +64,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
   const [zoomLocked, setZoomLocked] = useState(false);
   const pan = useRef<{ x: number; y: number; from: View; moved: boolean } | null>(null);
   const panned = useRef(false); // the click that ends a drag does nothing
+  const pannedAt = useRef(0); // when the last drag ended: a double-click right after it keeps the level
   const [hold, setHold] = useState<"back" | "fast" | null>(null); // Q held: play backwards, E held: twice as fast
   const [stage, setStage] = useState<HTMLDivElement | null>(null);
   const callouts = useCalloutMode();
@@ -73,6 +74,8 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
   const [drawing, setDrawing] = useState(false);
   const [tool, setTool] = useState<SketchTool>("pen");
   const [color, setColor] = useState(PEN_COLORS[1]);
+  const [penWidth, setPenWidth] = useState(PEN_WIDTHS[1]);
+  const viewLocked = zoomLocked || drawing; // drawing holds the view still; the user's own lock comes back after
   const [marks, setMarksState] = useState<BoardMark[]>([]);
   const marksRef = useRef(marks);
   const past = useRef<BoardMark[][]>([]);
@@ -366,7 +369,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
       if (multiLevel) setView((v) => (v === "all" ? 0 : v === 0 ? 1 : "all"));
       return;
     }
-    if (!drawing && e.button === 0 && zoom.z > 1 && !zoomLocked) {
+    if (e.button === 0 && zoom.z > 1 && !viewLocked) {
       pan.current = { x: e.clientX, y: e.clientY, from: zoom, moved: false };
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
@@ -379,7 +382,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
       stroke.current = { mark: null, origin: [p.x, p.y], start: marksRef.current };
       eraseAt(p);
     } else {
-      stroke.current = { mark: startMark(tool, 0, p, color, PEN_WIDTHS[1]), origin: [p.x, p.y], start: marksRef.current };
+      stroke.current = { mark: startMark(tool, 0, p, color, penWidth), origin: [p.x, p.y], start: marksRef.current };
       render();
     }
   };
@@ -403,6 +406,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
   const onPointerUp = () => {
     if (pan.current) {
       panned.current = pan.current.moved;
+      if (pan.current.moved) pannedAt.current = performance.now();
       pan.current = null;
       return;
     }
@@ -415,12 +419,19 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
     } else if (strayMark(st.mark)) render();
     else commitMarks([...marksRef.current, st.mark], st.start);
   };
+  // double-click: in "both" view show the clicked level alone, in one-level view switch to the other level
+  const onStageDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!multiLevel || !assets || drawing || performance.now() - pannedAt.current < 600) return;
+    const li = levels[Math.floor((e.clientX - e.currentTarget.getBoundingClientRect().left) / size)];
+    if (li === undefined) return;
+    setView(view === "all" ? li : (li + 1) % assets.meta.levels.length);
+  };
 
   // wheel: zoom around the pointer (a non-passive listener, so the page does not scroll)
   useEffect(() => {
     if (!stage) return;
     const onWheel = (e: WheelEvent) => {
-      if (zoomLocked || !assets) return;
+      if (viewLocked || !assets) return;
       e.preventDefault();
       const box = stage.getBoundingClientRect();
       const x = e.clientX - box.left, y = e.clientY - box.top;
@@ -434,7 +445,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
     };
     stage.addEventListener("wheel", onWheel, { passive: false });
     return () => stage.removeEventListener("wheel", onWheel);
-  }, [stage, zoomLocked, assets, size, levels.length]);
+  }, [stage, viewLocked, assets, size, levels.length]);
   useEffect(() => setZoom(NO_VIEW), [match.map]);
 
   // Q / E held: backwards / twice as fast, until the key is let go
@@ -488,11 +499,19 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
           else setDrawing(false);
           return;
         }
+        // X / Shift+X: the next / previous colour (by the physical key, for the Russian layout)
+        if (e.code === "KeyX") {
+          e.preventDefault();
+          const n = PEN_COLORS.length;
+          setColor((c) => PEN_COLORS[(PEN_COLORS.indexOf(c) + (e.shiftKey ? -1 : 1) + n) % n]);
+          setTool((v) => (v === "eraser" ? "pen" : v));
+          return;
+        }
       }
       switch (e.key) {
         case " ": setPlaying((p) => !p); break;
-        case "ArrowRight": e.shiftKey ? seek(tickRef.current + 5 * sec) : stepFrame(1); break;
-        case "ArrowLeft": e.shiftKey ? seek(tickRef.current - 5 * sec) : stepFrame(-1); break;
+        case "ArrowRight": e.shiftKey ? stepFrame(1) : seek(tickRef.current + 5 * sec); break;
+        case "ArrowLeft": e.shiftKey ? stepFrame(-1) : seek(tickRef.current - 5 * sec); break;
         case ".": stepFrame(1); break;
         case ",": stepFrame(-1); break;
         case "ArrowUp": case "+": case "=": changeSpeed(1); break;
@@ -597,8 +616,8 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
         <label className="small" title={t("replay.spottedTitle")}><input type="checkbox" checked={opts.spotted} onChange={(e) => setOpts({ ...opts, spotted: e.target.checked })} /> {t("replay.spotted")}</label>
         <CalloutToggle meta={assets?.meta} />
         <span className="seg zoom-ctl">
-          <button className={zoomLocked ? "on" : ""} title={t("replay.zoomLockTitle")} onClick={() => setZoomLocked((v) => !v)}>
-            {zoomLocked ? "🔒" : "🔓"}
+          <button className={viewLocked ? "on" : ""} disabled={drawing} title={t(drawing ? "replay.zoomLockDrawingTitle" : "replay.zoomLockTitle")} onClick={() => setZoomLocked((v) => !v)}>
+            {viewLocked ? "🔒" : "🔓"}
           </button>
           <button disabled={zoom.z === 1} title={t("replay.zoomResetTitle")} onClick={() => setZoom(NO_VIEW)}>
             {t("replay.zoomReset", { z: zoom.z.toFixed(1) })}
@@ -617,7 +636,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
               className={drawing ? "replay-canvas drawing" : "replay-canvas"}
               style={{
                 position: "relative", width, height: size,
-                cursor: drawing ? undefined : hover || hoverThrow ? "pointer" : zoom.z > 1 && !zoomLocked ? (pan.current?.moved ? "grabbing" : "grab") : undefined,
+                cursor: drawing ? undefined : hover || hoverThrow ? "pointer" : zoom.z > 1 && !viewLocked ? (pan.current?.moved ? "grabbing" : "grab") : undefined,
               }}
               onAuxClick={(e) => e.button === 1 && e.preventDefault()}
               onMouseMove={onStageMove}
@@ -627,6 +646,8 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
                 setHoverThrow(null);
               }}
               onClick={onStageClick}
+              onDoubleClick={onStageDoubleClick}
+              onMouseDown={(e) => e.detail > 1 && e.preventDefault()} // no text selection on double-click
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
@@ -712,8 +733,23 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
                 <>
                   <span className="seg">
                     {SKETCH_TOOLS.map(([k, label], i) => (
-                      <button key={k} className={tool === k ? "on" : ""} title={`${t(label)} (${i + 1})`} onClick={() => setTool(k)}>
+                      <button key={k} className={tool === k ? "on" : ""} title={`${t(label)} (${i + 1})${k === "eraser" ? "" : ` · ${t("replay.toolWidthHint")}`}`}
+                        onClick={() => setTool(k)}
+                        onContextMenu={(e) => {
+                          // right-click on the pencil or arrow: the next thickness
+                          if (k === "eraser") return;
+                          e.preventDefault();
+                          setTool(k);
+                          setPenWidth((w) => PEN_WIDTHS[(PEN_WIDTHS.indexOf(w) + 1) % PEN_WIDTHS.length]);
+                        }}>
                         <ToolIcon tool={k} />
+                      </button>
+                    ))}
+                  </span>
+                  <span className="seg">
+                    {PEN_WIDTHS.map((w) => (
+                      <button key={w} className={penWidth === w ? "on" : ""} title={t("board.lineWidth")} onClick={() => { setPenWidth(w); if (tool === "eraser") setTool("pen"); }}>
+                        <i className="board-width" style={{ height: Math.max(2, w / 2) }} />
                       </button>
                     ))}
                   </span>

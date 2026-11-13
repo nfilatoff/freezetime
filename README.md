@@ -264,22 +264,23 @@ What's on the map:
 - **Death spot** — a cross in the victim side's color. On hover a duel card is shown (who, whom, with what, headshot/wallbang/through smoke/blinded, damage and hits in both directions, killer HP, victim weapon, distance, duration, assist, trades), and on the map — the killer's position and the shot line. A click rewinds to the start of the duel.
 - Side panels — HP, armor, money, weapons as silhouettes (active one highlighted) and grenades of every player; a dead player's card is dimmed and marked ✕. The kill feed in the corner of the map uses icons like the game: weapon, headshot, wallbang, through smoke, no scope, a blinded killer, and an assist with a flash icon (hover for the name of each mark). Clicking a living player's card copies `setpos x y z; setang 0 yaw 0` for the current moment: paste it into the CS2 console on your own server to stand where they stood. The view pitch isn't in the replay frames, so it is 0. The header of each team shows the score at the round start, players alive (N/total), the team's money right now, and the buy type with the equipment value at the round start; "4 v 3" by the clock counts the living players of both sides. A player's card shows the damage dealt to enemies and the kills so far this round. A player who is hit turns red on the map for half a second, with a floating damage number (the "damage" checkbox; the killing blow shows where the player fell). Exported clips keep the red flash without the numbers. **Who sees whom** is an estimate from line of sight over the map mesh, a ±53° field of view and smoke: a ring on players an enemy sees (the "spotted" checkbox, an eye in the card), and hovering a player draws dashed lines to the enemies who see them and those they see. The duel card shows the reaction time of the killer and the victim. It is an approximation from map geometry (not the game's own spotted data) and needs the map mesh that awpy has cached in `~/.awpy`; nothing is downloaded.
 - **Throw point** — a ring in the grenade's color where the thrower stood, shown while the grenade flies and for 6 s after the throw. Hovering shows who threw it, a click copies `setpos` / `setang` with the real pitch and yaw of the throw (the grenade's `weapon_fire`). **Smokes and fires** carry a countdown: a ring that empties clockwise around the seconds left, on a disc in the thrower's side color (the side comes from the grenade whose flight ends where the cloud or fire appears). A **flash** leaves a dashed ring with a dot in the thrower's color for 3 s where it popped (the "flashes" checkbox). Each grenade has its own silhouette (smoke, flash, HE, molotov, incendiary, decoy): a flying grenade is drawn as its silhouette, player cards and the pips under players on the map show the carried grenades as white silhouettes, and the timeline under the map shows every grenade at its throw, tinted in the thrower's side color; hovering names the thrower. Weapons, grenades, armor, helmet, defuse kit and C4 use locally bundled Valve CS2 SVGs (`frontend/src/assets/equipment/`); shared React/Canvas renderers keep player cards, radar, timeline and clip killfeeds consistent. Asset source and attribution are recorded alongside the SVGs.
-- **Drawing** — "✎ Draw" (or D) turns the map into a whiteboard: pencil, arrow (Shift snaps to 45°) and eraser, five colors, undo and clear. The right mouse button erases. Drawings stay in place between rounds of the match, are not saved to disk, and go along with "⧉ To board". While drawing, clicks on death spots and throw points are off.
+- **Drawing** — "✎ Draw" (or D) turns the map into a whiteboard: pencil, arrow (Shift snaps to 45°) and eraser, five colors (X / Shift+X cycle them), three widths for the pencil and the arrow (right-click the tool button for the next one), undo and clear. The right mouse button erases. While drawing, the view is locked: the wheel and dragging don't zoom or move the radar. Drawings stay in place between rounds of the match, are not saved to disk, and go along with "⧉ To board". While drawing, clicks on death spots and throw points are off.
 
 Replay controls (the mouse wheel zooms the radar around the pointer and dragging moves it — names, smokes and drawings zoom with it, player icons keep their size; 🔒 locks the view, ⟲ shows the whole radar; above the map a row of round buttons, underlined in the winner's side color with a gap at every side switch, replaces the round list):
 
 | Key | Action |
 |---|---|
 | Space · hold Q · hold E | play/pause · play backwards while held · twice as fast while held |
-| ← / → | frame back/forward |
-| Shift + ← / → | ±5 s |
+| ← / → | ±5 s |
+| Shift + ← / → | frame back/forward |
 | ↑ / ↓ | speed (0.25×–8×) |
 | N / P | next/previous kill |
 | [ / ] | previous/next round (in a playlist: previous/next item) |
 | Home · 0 | end of freeze time · whole radar (zoom reset) |
-| 1 / 2 / 3 | upper / lower / both levels (on Nuke); the middle mouse button cycles them |
+| 1 / 2 / 3 | upper / lower / both levels (on Nuke); the middle mouse button cycles them, a double-click on the map shows the clicked level alone or switches to the other one |
 | D | drawing on/off |
 | 1 / 2 / 3 while drawing | pencil / arrow / eraser |
+| X / Shift + X while drawing | next / previous color |
 | Ctrl + Z, C, Esc while drawing | undo, clear, stop drawing |
 
 The link `#/match/<match>/replay/<round>/<second>` opens a round at the given moment.
