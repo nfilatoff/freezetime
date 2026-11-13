@@ -10,6 +10,7 @@ build/
 node_modules/
 dist/
 freezetime/app/static/
+freezetime/app/static.prev/
 
 # Data: demos, archives and parsed output
 out/

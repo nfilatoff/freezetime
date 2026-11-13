@@ -91,6 +91,8 @@ En la consola de Windows, para cirílico y caracteres especiales en la salida, d
 freezetime app                      # http://127.0.0.1:8000, el navegador se abre solo
 ```
 
+El acceso directo del escritorio (`start-freezetime.cmd`) recompila la aplicación web antes de iniciarla si sus fuentes cambiaron, por ejemplo tras `git pull` (requiere Node.js; la misma comprobación a mano: `scripts\ensure-frontend.ps1`).
+
 En «Biblioteca» añade una carpeta con demos (por ejemplo, `D:\Steam\steamapps\common\Counter-Strike Global Offensive\game\csgo`) o sube archivos con el botón «Subir .dem o archivo…» o arrastrándolos a la página. Las demos de carpetas se analizan con el botón «Analizar», las subidas, al momento. El análisis va en segundo plano con progreso; una demo de 250–300 MB se analiza en 20–30 s. Las demos ya analizadas no se vuelven a analizar.
 
 ### Biblioteca

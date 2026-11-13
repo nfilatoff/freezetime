@@ -192,7 +192,8 @@ def app_cmd(out: Path = Path("out"), host: str = "127.0.0.1", port: int = 8000, 
     from freezetime.app.server import STATIC_DIR, create_app
 
     if not STATIC_DIR.exists():
-        typer.echo("frontend is not built yet: cd frontend && npm install && npm run build", err=True)
+        typer.echo("frontend is not built yet: cd frontend && npm install && npm run build "
+                   "(or run scripts\\ensure-frontend.ps1)", err=True)
     url = f"http://{'127.0.0.1' if host in ('0.0.0.0', '::') else host}:{port}/"
     if open_browser:
         threading.Timer(1.0, webbrowser.open, args=(url,)).start()

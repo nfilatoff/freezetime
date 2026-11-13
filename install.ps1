@@ -191,10 +191,12 @@ if (-not $SkipRadars) {
 # ---------- 6. Launcher and shortcut ----------
 Write-Step 'Launcher'
 $launcher = Join-Path $root 'start-freezetime.cmd'
+# The launcher rebuilds the web app first when its sources changed (after a git pull or merge).
 @"
 @echo off
 cd /d "%~dp0"
 set PYTHONIOENCODING=utf-8
+powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\ensure-frontend.ps1"
 ".venv\Scripts\freezetime.exe" app %*
 "@ | Set-Content -Path $launcher -Encoding ASCII
 Write-Ok $launcher

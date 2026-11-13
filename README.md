@@ -91,6 +91,8 @@ In the Windows console, set `$env:PYTHONIOENCODING = "utf-8"` for Cyrillic and s
 freezetime app                      # http://127.0.0.1:8000, the browser opens by itself
 ```
 
+The desktop shortcut (`start-freezetime.cmd`) rebuilds the web app before starting when its sources changed, for example after `git pull` (needs Node.js; the same check by hand: `scripts\ensure-frontend.ps1`).
+
 In "Library", add a folder with demos (for example, `D:\Steam\steamapps\common\Counter-Strike Global Offensive\game\csgo`) or upload files with the "Upload .dem or archive…" button or by dragging them onto the page. Demos from folders are parsed with the "Parse" button, uploaded ones right away. Parsing runs in the background with progress; a 250–300 MB demo is parsed in 20–30 s. Already parsed demos are not parsed again.
 
 ### Library
