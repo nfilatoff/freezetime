@@ -2,8 +2,11 @@ import gzip
 import json
 import shutil
 
+import polars as pl
+
 from freezetime.context import load_match
-from freezetime.replay import build_round, round_payload
+from freezetime.extract import REPLAY_COLUMNS, write_replay
+from freezetime.replay import _state_flags, build_round, round_payload
 
 
 def test_round_document(dust2_mini):
@@ -15,10 +18,66 @@ def test_round_document(dust2_mini):
     assert {p["side"] for p in doc["players"]} == {"terrorist", "counter-terrorist"}
     for p in doc["players"]:
         assert all(len(p[k]) == n for k in ("x", "y", "yaw", "hp", "weapon", "bomb"))
+    if doc["has_player_states"]:
+        assert all(len(p[k]) == n for p in doc["players"] for k in ("scoped", "reloading", "walking", "crouched", "jumping"))
     assert doc["start_tick"] <= doc["freeze_end_tick"] < doc["end_tick"] <= doc["last_tick"]
     assert all(doc["start_tick"] <= k["tick"] <= doc["last_tick"] for k in doc["kills"])
     assert any(b["event"] == "finish_plant" and b["site"] == "A" for b in doc["bomb"])
     json.dumps(doc)  # serialisable as is
+
+
+def test_write_replay_captures_nullable_player_states(tmp_path):
+    values = {column: 1 for column in REPLAY_COLUMNS}
+    values.update(tick=4, steamid=123, name="player", side="terrorist", active_weapon="awp")
+    values.update(is_scoped=True, is_reloading=None, is_walking=False, is_crouched=True, is_jumping=False)
+
+    class Demo:
+        header = {"playback_ticks": 4}
+
+        def snapshots(self, **_kwargs):
+            return pl.DataFrame([values])
+
+    assert write_replay(Demo(), tmp_path) == 1
+    saved = pl.read_parquet(tmp_path / "replay.parquet").row(0, named=True)
+    assert [saved[k] for k in REPLAY_COLUMNS[-5:]] == [True, None, False, True, False]
+
+
+def test_replay_state_arrays_keep_false_and_unknown_values():
+    frames = pl.DataFrame({"state": pl.Series([True, False, None], dtype=pl.Boolean)})
+    assert _state_flags(frames, "state") == [1, 0, None]
+    assert _state_flags(frames, "missing") is None
+
+
+def test_legacy_dense_frames_leave_missing_states_unknown(dust2_mini, tmp_path):
+    d = tmp_path / "m"
+    shutil.copytree(dust2_mini, d)
+    frames = pl.read_parquet(d / "snapshots.parquet")
+    frames.write_parquet(d / "replay.parquet")
+    doc = build_round(load_match(d, extra_tables=("smokes", "fires", "grenades", "blinds", "shots", "damages")), 5)
+    assert not doc["has_player_states"]
+    assert all(p[k] is None for p in doc["players"] for k in ("scoped", "reloading", "walking", "crouched", "jumping"))
+
+
+def test_dense_player_states_align_true_false_and_null_frames(dust2_mini, tmp_path):
+    d = tmp_path / "m"
+    shutil.copytree(dust2_mini, d)
+    frames = pl.read_parquet(d / "snapshots.parquet")
+    states = ("is_scoped", "is_reloading", "is_walking", "is_crouched", "is_jumping")
+    frames = frames.with_columns(
+        pl.when(pl.col("tick") % 3 == 0).then(None)
+        .when((pl.col("tick") + i) % 2 == 0).then(True)
+        .otherwise(False).cast(pl.Boolean).alias(name)
+        for i, name in enumerate(states)
+    )
+    frames.write_parquet(d / "replay.parquet")
+    doc = build_round(load_match(d, extra_tables=("smokes", "fires", "grenades", "blinds", "shots", "damages")), 5)
+    assert doc["has_player_states"]
+    for player in doc["players"]:
+        source = frames.filter(pl.col("steamid") == int(player["steamid"]))
+        aligned = pl.DataFrame({"tick": doc["ticks"]}).join(source, on="tick", how="left")
+        for column, key in zip(states, ("scoped", "reloading", "walking", "crouched", "jumping"), strict=True):
+            expected = [None if value is None else int(value) for value in aligned[column].to_list()]
+            assert player[key] == expected
 
 
 def test_payload_is_cached(dust2_mini, tmp_path):

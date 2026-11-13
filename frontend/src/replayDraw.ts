@@ -46,6 +46,9 @@ export const nadeOfItem = (item: string) => ITEM_NADE[item];
 // ---- data cache: rounds kept in memory, shared by the replay and the clip builder ----
 const cache = new Map<string, Promise<Replay>>();
 const CACHE_ROUNDS = 40;
+export function clearReplayCache(id: string) {
+  for (const key of cache.keys()) if (key.startsWith(`${id}#`)) cache.delete(key);
+}
 export function loadReplay(id: string, round: number): Promise<Replay> {
   const key = `${id}#${round}`;
   let p = cache.get(key);
@@ -102,6 +105,11 @@ export interface PlayerState {
   secondary: string | null;
   nades: string[]; // grenade types (smoke, flashbang, he, molotov, incendiary, decoy), one per carried copy
   defusing: boolean;
+  scoped: boolean | null;
+  reloading: boolean | null;
+  walking: boolean | null;
+  crouched: boolean | null;
+  jumping: boolean | null;
   money: number | null;
   flash: number; // 0..1 remaining blindness
   seen: number; // bit j set: enemy players[j] sees this player (see ReplayPlayer.seen_by)
@@ -136,6 +144,11 @@ export function playerState(r: Replay, p: ReplayPlayer, tick: number): PlayerSta
     secondary: inv?.[1] ?? null,
     nades: inv ? (inv.slice(2) as string[]).map((n) => ITEM_NADE[n] ?? n) : [],
     defusing: !!p.defusing?.[i],
+    scoped: p.scoped?.[i] == null ? null : !!p.scoped[i],
+    reloading: p.reloading?.[i] == null ? null : !!p.reloading[i],
+    walking: p.walking?.[i] == null ? null : !!p.walking[i],
+    crouched: p.crouched?.[i] == null ? null : !!p.crouched[i],
+    jumping: p.jumping?.[i] == null ? null : !!p.jumping[i],
     money: p.money?.[i] ?? null,
     flash: Math.min(1, flash),
     seen: p.seen_by?.[i] ?? 0,
@@ -198,15 +211,16 @@ export interface PlayerStyle {
 
 const RAD = 6.5; // player icon radius, screen px
 const CONE_LEN = 64; // view cone length, screen px
-const CONE_HALF = 0.5; // half angle, rad (CS:GO's horizontal FOV is 90°)
+const CONE_HALF = 0.5; // normal half angle, rad (CS2's horizontal FOV is 90°)
 
 /** A player icon: view cone, flash, body, HP bar, name, active weapon and carried grenades. */
 export function drawPlayer(ctx: Ctx, st: PlayerState, px: number, py: number, s: number, tick: number, style: PlayerStyle) {
-  const rad = RAD * s;
+  const rad = RAD * (st.crouched === true ? 0.78 : 1) * s;
   const a = style.alpha;
   if (style.cone && st.yaw !== null) {
     const ang = (-st.yaw * Math.PI) / 180;
     const len = CONE_LEN * s;
+    const half = st.scoped === true ? 0.12 : CONE_HALF;
     const g = ctx.createRadialGradient(px, py, rad * 0.6, px, py, len);
     g.addColorStop(0, withAlpha(style.color, 0.7 * a));
     g.addColorStop(0.55, withAlpha(style.color, 0.32 * a));
@@ -215,7 +229,7 @@ export function drawPlayer(ctx: Ctx, st: PlayerState, px: number, py: number, s:
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.moveTo(px, py);
-    ctx.arc(px, py, len, ang - CONE_HALF, ang + CONE_HALF);
+    ctx.arc(px, py, len, ang - half, ang + half);
     ctx.closePath();
     ctx.fill();
     // bright edges and the aim line make the direction readable at a glance
@@ -223,7 +237,7 @@ export function drawPlayer(ctx: Ctx, st: PlayerState, px: number, py: number, s:
     ctx.strokeStyle = style.color;
     ctx.lineWidth = 1.3 * s;
     ctx.beginPath();
-    for (const e of [-CONE_HALF, CONE_HALF]) {
+    for (const e of [-half, half]) {
       ctx.moveTo(px + Math.cos(ang + e) * rad, py + Math.sin(ang + e) * rad);
       ctx.lineTo(px + Math.cos(ang + e) * len * 0.8, py + Math.sin(ang + e) * len * 0.8);
     }
@@ -241,6 +255,32 @@ export function drawPlayer(ctx: Ctx, st: PlayerState, px: number, py: number, s:
     ctx.lineWidth = 1.3 * s;
     ctx.beginPath();
     ctx.arc(px, py, RAD * s + 3 * s, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // Small geometric marks keep the busy radar readable; full names appear in each player row.
+  if (st.reloading === true) {
+    ctx.strokeStyle = "#ffd166";
+    ctx.lineWidth = 2 * s;
+    ctx.beginPath();
+    ctx.arc(px, py, rad + 3.5 * s, -Math.PI * 0.8, Math.PI * 0.35);
+    ctx.stroke();
+  }
+  if (st.walking === true) {
+    ctx.strokeStyle = "#8fe3a0";
+    ctx.lineWidth = 1.5 * s;
+    ctx.setLineDash([2 * s, 2 * s]);
+    ctx.beginPath();
+    ctx.arc(px, py, rad + 4.5 * s, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  if (st.jumping === true) {
+    ctx.strokeStyle = "#79c8ff";
+    ctx.lineWidth = 1.8 * s;
+    ctx.beginPath();
+    ctx.moveTo(px - 3 * s, py - rad - 1 * s);
+    ctx.lineTo(px, py - rad - 4 * s);
+    ctx.lineTo(px + 3 * s, py - rad - 1 * s);
     ctx.stroke();
   }
   if (st.flash > 0.05) {
@@ -286,10 +326,10 @@ export function drawPlayer(ctx: Ctx, st: PlayerState, px: number, py: number, s:
       y += 5 * s;
     }
     const pips = [...st.nades, ...(st.bomb ? ["c4"] : []), ...(st.kit ? ["kit"] : [])];
-    const step = 8 * s;
+    const step = 15 * s;
     let x = px - ((pips.length - 1) * step) / 2;
     for (const n of pips) {
-      drawItemPip(ctx, n, x, y + 4.5 * s, s, st.weapon !== null && nadeName(st.weapon) === n);
+      drawItemPip(ctx, n, x, y + 5.5 * s, s, st.weapon !== null && nadeName(st.weapon) === n);
       x += step;
     }
   }
@@ -332,7 +372,7 @@ function drawItemPip(ctx: Ctx, item: string, x: number, y: number, s: number, ac
     drawEquipmentIcon(ctx, item, x, y, 8 * s, 7 * s, active ? "#fff" : item === "c4" ? "#ff6868" : "#86d7ae", "#000");
     return;
   }
-  drawNadeIcon(ctx, item, x, y, 10 * s, active ? "#ffe27a" : "#fff", "#000");
+  drawNadeIcon(ctx, item, x, y, 14 * s, active ? "#ffe27a" : "#fff", "#000");
 }
 
 const TRACER_TICKS = 10; // a tracer stays this long after the shot
@@ -487,7 +527,7 @@ export function drawGrenade(
     ctx.fill();
   } else {
     ctx.globalAlpha = alpha;
-    drawNadeIcon(ctx, g.type, hpx, hpy, 10 * s, color, "#000");
+    drawNadeIcon(ctx, g.type, hpx, hpy, 15 * s, color, "#000");
   }
   ctx.globalAlpha = 1;
 }
@@ -502,7 +542,7 @@ export const throwVisible = (g: Replay["grenades"][number], tick: number, rate: 
 export function drawThrowPoint(ctx: Ctx, g: Replay["grenades"][number], P: ToPx, s: number, alpha: number, highlight: boolean) {
   if (!g.throw) return;
   const [px, py] = P(g.throw.x, g.throw.y);
-  const r = (highlight ? THROW_MARK + 2.5 : THROW_MARK) * s;
+  const r = (highlight ? THROW_MARK + 3 : THROW_MARK + 1) * s;
   ctx.globalAlpha = alpha;
   ctx.fillStyle = "rgba(0,0,0,0.55)";
   ctx.strokeStyle = "#000";
@@ -515,13 +555,13 @@ export function drawThrowPoint(ctx: Ctx, g: Replay["grenades"][number], P: ToPx,
   ctx.strokeStyle = color;
   ctx.lineWidth = (highlight ? 2.6 : 2) * s;
   ctx.stroke();
-  drawNadeIcon(ctx, g.type, px, py, 7 * s, color);
+  drawNadeIcon(ctx, g.type, px, py, 10 * s, color, "#000");
   ctx.globalAlpha = 1;
 }
 
 /** Index of the grenade whose throw point is under a point (radar px), or -1. */
 export function throwAt(r: Replay, tick: number, P: ToPx, rx: number, ry: number, s: number, visible: (z: number) => boolean): number {
-  let best = -1, bestD = (THROW_MARK + 5) * s;
+  let best = -1, bestD = (THROW_MARK + 7) * s;
   r.grenades.forEach((g, i) => {
     if (!g.throw || !throwVisible(g, tick, r.tick_rate) || !visible(g.throw.z)) return;
     const [px, py] = P(g.throw.x, g.throw.y);

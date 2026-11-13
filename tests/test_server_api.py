@@ -64,6 +64,16 @@ def test_other_computers_get_nothing(out):
         assert call(app, "GET", path)[0] == 404, path
 
 
+def test_replay_state_metadata_and_refresh_conflict(out, monkeypatch):
+    app = create_app(out)
+    status, match = call(app, "GET", "/api/matches/dust2_mini")
+    assert status == 200 and match["has_player_states"] is False and match["can_refresh_replay"] is False
+    endpoint = next(r.endpoint for r in app.routes if getattr(r.endpoint, "__name__", "") == "build_replay_data")
+    queue = next(cell.cell_contents for cell in endpoint.__closure__ if hasattr(cell.cell_contents, "active_for_match"))
+    monkeypatch.setattr(queue, "active_for_match", lambda _match_id: object())
+    assert call(app, "POST", "/api/matches/dust2_mini/replay-data") == (409, {"detail": "the match is being processed; wait for the job to finish"})
+
+
 def test_a_pack_goes_out_and_comes_back(out, tmp_path_factory):
     import tempfile
     from pathlib import Path

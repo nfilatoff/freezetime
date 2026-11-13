@@ -27,7 +27,7 @@ from freezetime.context import Match, load_match
 from freezetime.lineups import MATCH_DIST, MATCH_TICKS, WEAPON_TYPE
 from freezetime.visibility import checker, reaction_times, round_visibility
 
-FORMAT = 9  # bump when the document changes; old cache files are then ignored
+FORMAT = 10  # bump when the document changes; old cache files are then ignored
 PRE_FREEZE_SEC = 20.0  # replay starts at most this long before freeze end
 POST_END_SEC = 4.0  # and runs this long after the round end (capped by the official end)
 GRENADE_STEP = 2  # keep every n-th tick of grenade trajectories
@@ -77,6 +77,16 @@ def round_frames(m: Match, start: int, end: int) -> tuple[pl.DataFrame, int]:
     else:
         frames, step = _in(m.data["snapshots"], "tick", start, end), m.snap_step
     return frames.filter(pl.col("steamid").is_not_null() & (pl.col("steamid") != 0)), step
+
+
+PLAYER_STATE_COLUMNS = ("is_scoped", "is_reloading", "is_walking", "is_crouched", "is_jumping")
+
+
+def _state_flags(frame: pl.DataFrame, column: str) -> list[int | None] | None:
+    """Per-frame boolean flags; None means this extract predates the state or that frame is unknown."""
+    if column not in frame.columns:
+        return None
+    return [None if value is None else int(bool(value)) for value in frame[column].to_list()]
 
 
 def build_round(m: Match, round_num: int) -> dict:
@@ -132,6 +142,11 @@ def build_round(m: Match, round_num: int) -> dict:
             "bomb": f["has_bomb"].fill_null(False).cast(pl.Int8).to_list(),
             "weapon": [weapon_idx.get(w, -1) if a else -1 for w, a in zip(f["active_weapon"].to_list(), alive.to_list())],
             "defusing": f["is_defusing"].fill_null(False).cast(pl.Int8).to_list() if "is_defusing" in f.columns else None,
+            "scoped": _state_flags(f, "is_scoped"),
+            "reloading": _state_flags(f, "is_reloading"),
+            "walking": _state_flags(f, "is_walking"),
+            "crouched": _state_flags(f, "is_crouched"),
+            "jumping": _state_flags(f, "is_jumping"),
             # the balance at every frame: it drops with each purchase and grows with kill rewards
             "money": _ints(f["money"].forward_fill().backward_fill().fill_null(0)) if "money" in f.columns else None,
         })
@@ -167,6 +182,7 @@ def build_round(m: Match, round_num: int) -> dict:
         "reason": info["reason_name"],
         "step": step,
         "low_res": not (m.directory / "replay.parquet").exists(),
+        "has_player_states": set(PLAYER_STATE_COLUMNS).issubset(frames.columns),
         "ticks": ticks.to_list(),
         "teams": {r["side"]: r["team"] for r in sides.iter_rows(named=True)},
         "weapons": weapons,

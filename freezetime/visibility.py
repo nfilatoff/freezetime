@@ -25,6 +25,7 @@ from pathlib import Path
 import polars as pl
 
 EYE_Z = 64.0  # eye height above the feet
+EYE_Z_CROUCHED = 46.0
 HALF_FOV_DEG = 53.0  # half of the horizontal field of view
 SMOKE_R = 144.0  # a line of sight through this radius around a smoke centre is blocked
 SMOKE_BLOOM_SEC = 3.0  # a smoke blocks vision only after it has bloomed
@@ -79,7 +80,7 @@ def _smoked(a: tuple, b: tuple, smokes: list[tuple], tick: int) -> bool:
     return False
 
 
-def sees(chk, viewer: tuple, target: tuple, smokes: list[tuple], tick: int) -> bool:
+def sees(chk, viewer: tuple, target: tuple, smokes: list[tuple], tick: int, viewer_crouched: bool = False, target_crouched: bool = False) -> bool:
     """Whether ``viewer`` can see ``target`` at ``tick`` (approximate, see the module docstring).
 
     ``smokes`` are ``(bloom_tick, end_tick, x, y)``: already shifted by ``SMOKE_BLOOM_SEC`` (see ``bloomed``).
@@ -90,7 +91,9 @@ def sees(chk, viewer: tuple, target: tuple, smokes: list[tuple], tick: int) -> b
         return False
     if _smoked(viewer, target, smokes, tick):
         return False
-    return bool(chk.is_visible((viewer[0], viewer[1], viewer[2] + EYE_Z), (target[0], target[1], target[2] + EYE_Z)))
+    viewer_eye = EYE_Z_CROUCHED if viewer_crouched else EYE_Z
+    target_eye = EYE_Z_CROUCHED if target_crouched else EYE_Z
+    return bool(chk.is_visible((viewer[0], viewer[1], viewer[2] + viewer_eye), (target[0], target[1], target[2] + target_eye)))
 
 
 def bloomed(smokes: list[tuple], rate: float) -> list[tuple]:
@@ -99,13 +102,19 @@ def bloomed(smokes: list[tuple], rate: float) -> list[tuple]:
 
 
 def _positions(frames: pl.DataFrame, only: set[int] | None = None) -> dict[int, dict[int, tuple]]:
-    """``{tick: {steamid: (side, x, y, z, yaw)}}`` for the living players of a frame table."""
+    """``{tick: {steamid: (side, x, y, z, yaw, crouched)}}`` for living players."""
     f = frames.filter((pl.col("health") > 0) & pl.col("x").is_not_null() & pl.col("yaw").is_not_null())
     if only is not None:
         f = f.filter(pl.col("steamid").is_in(list(only)))
     out: dict[int, dict[int, tuple]] = {}
-    for tick, sid, side, x, y, z, yaw in f.select("tick", "steamid", "side", "x", "y", "z", "yaw").iter_rows():
-        out.setdefault(tick, {})[sid] = (side, x, y, z, yaw)
+    columns = ["tick", "steamid", "side", "x", "y", "z", "yaw"]
+    has_crouch = "is_crouched" in f.columns
+    if has_crouch:
+        columns.append("is_crouched")
+    for row in f.select(columns).iter_rows():
+        tick, sid, side, x, y, z, yaw = row[:7]
+        crouched = bool(row[7]) if has_crouch and row[7] is not None else False
+        out.setdefault(tick, {})[sid] = (side, x, y, z, yaw, crouched)
     return out
 
 
@@ -124,7 +133,7 @@ def round_visibility(frames: pl.DataFrame, smokes: list[tuple], chk, rate: float
         players = list(pos.get(tick, {}).items())
         for a, (a_side, *a_pt) in players:
             for b, (b_side, *b_pt) in players:
-                if a_side != b_side and sees(chk, a_pt, b_pt, smokes, tick):
+                if a_side != b_side and sees(chk, a_pt[:4], b_pt[:4], smokes, tick, a_pt[4], b_pt[4]):
                     out[b][i] |= 1 << idx[a]
     return out
 
@@ -156,7 +165,7 @@ def reaction_times(
 
     def view(i: int, a: int, v: int) -> bool:
         p = pos[ticks[i]]
-        return a in p and v in p and sees(chk, p[a][1:], p[v][1:], smokes, ticks[i])
+        return a in p and v in p and sees(chk, p[a][1:5], p[v][1:5], smokes, ticks[i], p[a][5], p[v][5])
 
     out = []
     for (a, v), damage in first.items():

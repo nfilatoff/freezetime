@@ -27,6 +27,19 @@ def test_sees_needs_the_target_in_front():
     assert not sees(Fake(False), VIEWER, (500.0, 0.0, 0.0, 0.0), [], 100)  # a wall
 
 
+def test_crouched_eye_height_is_used_for_both_players():
+    class Eyes:
+        points = None
+
+        def is_visible(self, viewer, target):
+            self.points = viewer, target
+            return True
+
+    chk = Eyes()
+    assert sees(chk, VIEWER, (500.0, 0.0, 0.0, 0.0), [], 100, True, True)
+    assert chk.points == ((0.0, 0.0, 46.0), (500.0, 0.0, 46.0))
+
+
 def test_sees_through_a_smoke_only_while_it_burns():
     smokes = bloomed([(1000, 2000, 250.0, 20.0)], 64.0)  # blocks from tick 1192
     target = (500.0, 0.0, 0.0, 0.0)

@@ -5,7 +5,7 @@ import { PEN_COLORS, PEN_WIDTHS, boardFromFrame, drawMarks, emptyBoard, hitTest,
 import { useFitHeight } from "../fit";
 import { CT_COLOR, RADAR_SIZE, T_COLOR, levelLabel, levelOf, panelLevels, sideColor, sideShort, useMapAssets, worldToPx } from "../radar";
 import {
-  BOMB_TIME, NO_VIEW, attackerBlind, ROUND_TIME, bombState, drawRound, fmtClock, fmtMoney, frameAt, killAt, loadReplay, nadeOfItem, panBy, playerStates, throwAt, toRadar, weaponName, zoomAt,
+  BOMB_TIME, NO_VIEW, attackerBlind, ROUND_TIME, bombState, clearReplayCache, drawRound, fmtClock, fmtMoney, frameAt, killAt, loadReplay, nadeOfItem, panBy, playerStates, throwAt, toRadar, weaponName, zoomAt,
   type PlayerState, type View,
 } from "../replayDraw";
 import { useCalloutMode } from "../callouts";
@@ -52,6 +52,9 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
   const { assets, error: mapError } = useMapAssets(match.map);
   const [data, setData] = useState<Replay | null>(null);
   const [loadMs, setLoadMs] = useState<number | null>(null);
+  const [refreshJob, setRefreshJob] = useState<{ id: number; match: string } | null>(null);
+  const currentMatch = useRef(match.id);
+  currentMatch.current = match.id;
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
@@ -107,19 +110,63 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
     setHoverPlayer(null);
     setError(null);
     const t0 = performance.now();
+    let cancelled = false;
     loadReplay(match.id, round)
       .then((r) => {
+        if (cancelled) return;
         setLoadMs(Math.round(performance.now() - t0));
         tickRef.current = r.freeze_end_tick + (at ?? -1) * r.tick_rate;
         setUiTick(tickRef.current);
         setData(r);
         if (autoplay) setPlaying(true);
         const next = rounds[roundIdx + 1];
-        if (next !== undefined) loadReplay(match.id, next).catch(() => {});
+        if (next !== undefined && r.has_player_states) loadReplay(match.id, next).catch(() => {});
       })
-      .catch((e: Error) => setError(e.message));
+      .catch((e: Error) => { if (!cancelled) setError(e.message); });
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [match.id, round]);
+
+  useEffect(() => {
+    if (refreshJob === null || refreshJob.match !== match.id) return;
+    let cancelled = false;
+    let failures = 0;
+    const timer = window.setInterval(async () => {
+      try {
+        const jobs = await api.jobs();
+        failures = 0;
+        const job = jobs.find((candidate) => candidate.id === refreshJob.id);
+        if (!job || job.status === "queued" || job.status === "running") return;
+        window.clearInterval(timer);
+        if (cancelled || currentMatch.current !== refreshJob.match) return;
+        if (job.status === "error") {
+          setError(job.error ?? t("err.connection", { name: "replay" }));
+          return setRefreshJob(null);
+        }
+        clearReplayCache(refreshJob.match);
+        try {
+          const fresh = await loadReplay(refreshJob.match, round);
+          if (cancelled || currentMatch.current !== refreshJob.match) return;
+          tickRef.current = fresh.freeze_end_tick + (at ?? -1) * fresh.tick_rate;
+          setUiTick(tickRef.current);
+          setData(fresh);
+          const next = rounds[roundIdx + 1];
+          if (next !== undefined) loadReplay(refreshJob.match, next).catch(() => {});
+        } catch (e) {
+          if (!cancelled) setError((e as Error).message);
+        } finally {
+          if (!cancelled && currentMatch.current === refreshJob.match) setRefreshJob(null);
+        }
+      } catch (e) {
+        failures++;
+        if (failures === 5 && !cancelled) setError((e as Error).message || t("err.connection", { name: "replay refresh" }));
+      }
+    }, 1000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [refreshJob, match.id, round]);
+  useEffect(() => {
+    if (refreshJob && refreshJob.match !== match.id) setRefreshJob(null);
+  }, [match.id, refreshJob]);
 
   useEffect(() => {
     const el = boxRef.current;
@@ -517,6 +564,21 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
           </span>
         )}
         {loadMs !== null && <span className="muted small">{t("replay.loaded", { ms: loadMs })}{data?.low_res ? t("replay.lowRes") : ""}</span>}
+        {data && !data.has_player_states && (
+          <span className="replay-state-refresh">
+            <span className="muted small">{t("replay.stateUnavailable")}</span>
+            <button className="small-btn" disabled={!match.can_refresh_replay || refreshJob !== null}
+              title={match.can_refresh_replay ? t("replay.stateRefreshTitle") : t("replay.stateRefreshUnavailable")}
+              onClick={() => {
+                const requestedMatch = match.id;
+                api.buildReplayData(requestedMatch).then(({ job }) => {
+                  if (currentMatch.current === requestedMatch) setRefreshJob({ id: job, match: requestedMatch });
+                }).catch((e: Error) => setError(e.message));
+              }}>
+              {refreshJob?.match === match.id ? t("replay.stateRefreshing") : t("replay.stateRefresh")}
+            </button>
+          </span>
+        )}
         <span className="grow" />
         {assets && assets.meta.levels.length > 1 && (
           <span className="seg">
@@ -787,6 +849,14 @@ function TeamPanel({ states, head, title, color, onCopy, tally, height, all }: {
             </span>
           </div>
           <div className="hp"><div style={{ width: `${s.hp}%`, background: color }} /><span>{s.hp}</span></div>
+          {s.hp > 0 && <div className="pl-state">
+            {([
+              [s.scoped, "replay.stateScoped"], [s.reloading, "replay.stateReloading"], [s.walking, "replay.stateWalking"],
+              [s.crouched, "replay.stateCrouched"], [s.jumping, "replay.stateJumping"],
+            ] as [boolean | null, Key][]).filter(([active]) => active === true).map(([, label]) => (
+              <span key={label} title={t(label)}>{t(label)}</span>
+            ))}
+          </div>}
           <div className="pl-weapon">
             <span className="pl-held">
               {s.hp > 0 && !(s.p.inv && (s.weapon === s.primary || s.weapon === s.secondary)) && <EquipmentIcon item={s.weapon} size={12} maxWidth={30} title={weaponName(s.weapon)} fallback={weaponName(s.weapon)} />}
@@ -799,7 +869,7 @@ function TeamPanel({ states, head, title, color, onCopy, tally, height, all }: {
               {[s.primary, s.secondary].filter(Boolean).map((w) => (
                 <span key={w} className={`pl-gun ${w === s.weapon ? "on" : ""}`}><EquipmentIcon item={w} size={15} maxWidth={46} title={weaponName(w)} fallback={weaponName(w)} /></span>
               ))}
-              <span className="pl-nades">{s.nades.map((n, i) => <span key={i} className={s.weapon && nadeOfItem(s.weapon) === n ? "on" : ""}><NadeIcon type={n} size={13} title={td(`board.nade.${n}`, n)} /></span>)}</span>
+              <span className="pl-nades">{s.nades.map((n, i) => <span key={i} className={s.weapon && nadeOfItem(s.weapon) === n ? "on" : ""}><NadeIcon type={n} size={16} title={td(`board.nade.${n}`, n)} /></span>)}</span>
             </div>
           )}
         </div>
@@ -876,7 +946,7 @@ function Timeline({ r, tick, onSeek, notes }: { r: Replay; tick: number; onSeek:
           style={{ left: pct(g.t[0]) }}
           title={t("tl.nade", { nade: td(`nade.${g.type}`, g.type), who: r.players.find((p) => p.steamid === g.thrower)?.name ?? "?" })}
         >
-          <NadeIcon type={g.type} color={g.side ? sideColor(g.side) : "#888"} size={12} />
+          <NadeIcon type={g.type} color={g.side ? sideColor(g.side) : "#888"} size={16} />
         </div>
       ))}
       {r.bomb.filter((b) => b.event === "finish_plant" || b.event === "defuse").map((b, i) => (

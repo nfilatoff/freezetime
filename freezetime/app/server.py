@@ -45,7 +45,7 @@ from freezetime.highlights import add_custom, delete_custom, highlights, kill_cl
 from freezetime.lineups import MAP_RE, PRACTICE, cfg_name, lineup_cfg, lineup_commands, list_cfg, safe_text, throws
 from freezetime.maps import ZoneError, available_maps, load_map_config, save_zones
 from freezetime.player_stats import player_stats
-from freezetime.replay import round_payload
+from freezetime.replay import PLAYER_STATE_COLUMNS, round_payload
 from freezetime.scout import MatchData, dossier, match_data, playbook as discovered_playbook, roster_suggestions, select_rounds, similar_rounds, strategy_stats
 from freezetime.tactics import tactics, userid_map, utility_events
 from freezetime.team_stats import team_stats
@@ -160,6 +160,11 @@ def _stamp(d: Path) -> float:
     return (d / "manifest.json").stat().st_mtime
 
 
+def _has_player_states(d: Path) -> bool:
+    path = d / "replay.parquet"
+    return path.exists() and set(PLAYER_STATE_COLUMNS).issubset(pl.scan_parquet(path).collect_schema().names())
+
+
 @lru_cache(maxsize=64)
 def _overview(d: Path, _stamp: float) -> dict:
     m = load_match(d)
@@ -201,6 +206,7 @@ def _overview(d: Path, _stamp: float) -> dict:
         "tick_rate": rate,
         "has_config": load_map_config(m.map_name) is not None,
         "has_replay": (d / "replay.parquet").exists(),
+        "has_player_states": _has_player_states(d),
         "header": {k: manifest["header"].get(k) for k in ("server_name", "client_name", "map_name", "demo_version_name")},
         "score": {r["team"]: r["rounds_won"] for r in ts["summary"].iter_rows(named=True)},
         "timeline": timeline,
@@ -586,6 +592,7 @@ def create_app(out: str | Path = "out") -> FastAPI:
         for d in lib.extracts():
             manifest = json.loads((d / "manifest.json").read_text(encoding="utf-8"))
             entry = {"id": d.name, "map": manifest["header"].get("map_name"), "has_replay": (d / "replay.parquet").exists(),
+                     "has_player_states": _has_player_states(d), "can_refresh_replay": lib.demo_for(d) is not None,
                      "modified": _stamp(d), "busy": jobs.active_for_match(d.name) is not None}
             try:
                 ov = _overview(d, _stamp(d))
@@ -691,6 +698,8 @@ def create_app(out: str | Path = "out") -> FastAPI:
     @api.post("/api/matches/{match_id}/replay-data")
     def build_replay_data(match_id: str) -> dict:
         d = lib.match_dir(match_id)
+        if jobs.active_for_match(match_id):
+            raise HTTPException(409, "the match is being processed; wait for the job to finish")
         demo = lib.demo_for(d)
         if demo is None:
             raise HTTPException(404, "the source .dem was not found; add its folder to the library")
@@ -700,7 +709,9 @@ def create_app(out: str | Path = "out") -> FastAPI:
     @api.get("/api/matches/{match_id}")
     def match(match_id: str) -> dict:
         d = lib.match_dir(match_id)
-        return _overview(d, _stamp(d))
+        overview = dict(_overview(d, _stamp(d)))
+        overview["can_refresh_replay"] = lib.demo_for(d) is not None
+        return overview
 
     @api.get("/api/matches/{match_id}/player-stats")
     def match_player_stats(match_id: str) -> dict:

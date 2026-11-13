@@ -62,6 +62,8 @@ export interface MatchOverview {
   tick_rate: number;
   has_config: boolean;
   has_replay: boolean;
+  has_player_states: boolean;
+  can_refresh_replay: boolean;
   header: Record<string, string | null>;
   score: Record<string, number>;
   timeline: TimelineRound[];
@@ -456,6 +458,11 @@ export interface ReplayPlayer {
   bomb: number[];
   weapon: number[];
   defusing: number[] | null;
+  scoped: (number | null)[] | null;
+  reloading: (number | null)[] | null;
+  walking: (number | null)[] | null;
+  crouched: (number | null)[] | null;
+  jumping: (number | null)[] | null;
   money: number[] | null; // the balance at every frame
   seen_by: number[] | null; // per frame: bit j set = enemy players[j] sees this player (null without a map mesh)
   inv: [number, number][] | null; // [tick, index into Replay.items] at every inventory change
@@ -542,6 +549,7 @@ export interface Replay {
   reason: string;
   step: number;
   low_res: boolean;
+  has_player_states: boolean;
   ticks: number[];
   teams: Partial<Record<Side, string>>;
   weapons: string[];

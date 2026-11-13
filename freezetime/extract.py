@@ -16,6 +16,7 @@ REPLAY_EVERY = 4  # ticks between replay frames (16 per second at 64 tick)
 REPLAY_COLUMNS = [
     "tick", "steamid", "name", "side", "x", "y", "z", "yaw", "health", "armor", "has_helmet", "has_defuser",
     "has_bomb", "active_weapon", "is_defusing", "is_blinded", "money",
+    "is_scoped", "is_reloading", "is_walking", "is_crouched", "is_jumping",
 ]
 
 Progress = Callable[[float, str], None]
