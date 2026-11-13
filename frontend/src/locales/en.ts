@@ -105,6 +105,7 @@ export const en = {
   "common.loading": "Loading…",
   "common.close": "Close",
   "ps.pick": "Click a player for kills by weapon, accuracy and flashes.",
+  "ps.noSteamId": "No per-player detail: bots and observers have no Steam ID.",
   "ps.title": "{name}: weapons, accuracy, flashes",
   "ps.accuracy": "Accuracy",
   "ps.hitsOf": "{hits} hits of {shots} shots",

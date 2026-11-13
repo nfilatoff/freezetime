@@ -102,6 +102,7 @@ export const ru: Record<Key, Entry> = {
   "common.loading": "Загрузка…",
   "common.close": "Закрыть",
   "ps.pick": "Щёлкните по игроку: убийства по оружию, точность и флешки.",
+  "ps.noSteamId": "Подробностей по игроку нет: у ботов и наблюдателей нет Steam ID.",
   "ps.title": "{name}: оружие, точность, флешки",
   "ps.accuracy": "Точность",
   "ps.hitsOf": "{hits} попаданий из {shots} выстрелов",

@@ -102,6 +102,7 @@ export const es: Record<Key, Entry> = {
   "common.loading": "Cargando…",
   "common.close": "Cerrar",
   "ps.pick": "Haz clic en un jugador: kills por arma, precisión y flashes.",
+  "ps.noSteamId": "Sin detalle por jugador: los bots y observadores no tienen Steam ID.",
   "ps.title": "{name}: armas, precisión, flashes",
   "ps.accuracy": "Precisión",
   "ps.hitsOf": "{hits} impactos de {shots} disparos",

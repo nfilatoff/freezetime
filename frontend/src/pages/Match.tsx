@@ -162,7 +162,7 @@ function MatchInsights({ id }: { id: string }) {
 function Overview({ match }: { match: MatchOverview }) {
   const ts = match.team_stats;
   return (
-    <div>
+    <div className="match-overview">
       <h2>{t("overview.flow")}</h2>
       <div className="muted small">{t("overview.hint")}</div>
       <RoundStrip match={match} />
@@ -252,7 +252,7 @@ function Players({ match }: { match: MatchOverview }) {
   return (
     <>
       <DataTable rows={match.players} columns={columns} onRowClick={(r) => setPick(pick?.steamid === r.steamid ? null : r)}
-        selected={(r) => r.steamid === pick?.steamid} />
+        selected={(r) => r.steamid === pick?.steamid} canClick={(r) => Number(r.steamid) > 0} />
       {!pick && <div className="muted small">{t("ps.pick")}</div>}
       {pick && <PlayerStatsPanel key={String(pick.steamid)} matchId={match.id} player={pick} onClose={() => setPick(null)} />}
     </>

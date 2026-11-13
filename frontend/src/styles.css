@@ -668,3 +668,14 @@ fieldset.plain { border: none; padding: 0; margin: 0; min-width: 0; }
 .match-page h2 { margin: 10px 0 6px; }
 .insights-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(460px, 100%), 1fr)); gap: 16px; }
 .insights-pair h3 { margin: 4px 0; }
+/* short windows (1280x720): the match overview tightens its spacing so it fits without scrolling */
+@media (max-height: 760px) {
+  .match-overview h2 { margin: 6px 0 4px; }
+  .match-overview h3 { margin: 2px 0; }
+  .match-overview .round-strip { margin: 4px 0 8px; padding: 8px 12px; }
+  .match-overview .strip-cell { width: 20px; height: 20px; }
+  .match-overview .strip-num { width: 20px; }
+  .match-overview .insights { gap: 5px; margin: 4px 0; }
+  .match-overview .insight { padding: 6px 10px; gap: 3px; }
+  .match-overview .data-more { margin: 6px 0 0; }
+}
