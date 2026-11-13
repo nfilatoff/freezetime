@@ -1,7 +1,7 @@
 """Compact per-round replay data for the app's 2D replay.
 
 One round becomes a JSON document with a shared tick grid and per-player arrays
-(``x``, ``y``, ``z``, ``yaw``, ``hp``, ...), inventory changes, grenade trajectories (with the
+(``x``, ``y``, ``z``, ``yaw``, ``hp``, ``money``, ...), inventory changes, grenade trajectories (with the
 thrower's position and view angles at the release, for ``setpos``), smokes
 and fires with their real lifetimes and the thrower's side, blinds, kills with duel details, bomb events and shots
 with their direction and hit point. Documents are cached gzipped in
@@ -23,7 +23,7 @@ import polars as pl
 from freezetime.context import Match, load_match
 from freezetime.lineups import MATCH_DIST, MATCH_TICKS, WEAPON_TYPE
 
-FORMAT = 6  # bump when the document changes; old cache files are then ignored
+FORMAT = 7  # bump when the document changes; old cache files are then ignored
 PRE_FREEZE_SEC = 20.0  # replay starts at most this long before freeze end
 POST_END_SEC = 4.0  # and runs this long after the round end (capped by the official end)
 GRENADE_STEP = 2  # keep every n-th tick of grenade trajectories
@@ -124,7 +124,8 @@ def build_round(m: Match, round_num: int) -> dict:
             "bomb": f["has_bomb"].fill_null(False).cast(pl.Int8).to_list(),
             "weapon": [weapon_idx.get(w, -1) if a else -1 for w, a in zip(f["active_weapon"].to_list(), alive.to_list())],
             "defusing": f["is_defusing"].fill_null(False).cast(pl.Int8).to_list() if "is_defusing" in f.columns else None,
-            "money": int(f["money"].drop_nulls().first()) if "money" in f.columns and f["money"].drop_nulls().len() else None,
+            # the balance at every frame: it drops with each purchase and grows with kill rewards
+            "money": _ints(f["money"].forward_fill().backward_fill().fill_null(0)) if "money" in f.columns else None,
         })
 
     inventories = _inventories(m, start, end, roster["steamid"])

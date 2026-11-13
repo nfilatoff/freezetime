@@ -89,6 +89,7 @@ export interface PlayerState {
   secondary: string | null;
   nades: string[]; // grenade types (smoke, flashbang, he, molotov, incendiary, decoy), one per carried copy
   defusing: boolean;
+  money: number | null;
   flash: number; // 0..1 remaining blindness
 }
 
@@ -121,6 +122,7 @@ export function playerState(r: Replay, p: ReplayPlayer, tick: number): PlayerSta
     secondary: inv?.[1] ?? null,
     nades: inv ? (inv.slice(2) as string[]).map((n) => ITEM_NADE[n] ?? n) : [],
     defusing: !!p.defusing?.[i],
+    money: p.money?.[i] ?? null,
     flash: Math.min(1, flash),
   };
 }

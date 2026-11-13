@@ -697,7 +697,7 @@ function TeamPanel({ states, title, color, onCopy, height }: { states: PlayerSta
             {[
               // the active gun is highlighted in the inventory line below; other active items are named here
               s.hp <= 0 ? "DEAD" : s.p.inv && (s.weapon === s.primary || s.weapon === s.secondary) ? null : weaponName(s.weapon),
-              s.p.money !== null ? `$${s.p.money}` : null,
+              s.money !== null ? `$${s.money}` : null,
             ].filter(Boolean).join(" · ")}
           </div>
           {s.hp > 0 && (s.primary || s.secondary || s.nades.length > 0) && (

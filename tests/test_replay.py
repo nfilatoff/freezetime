@@ -77,3 +77,26 @@ def test_smokes_and_fires_know_their_thrower_side(dust2_mini):
 
     lone = _owned([{"start": 100, "end": 200, "x": 0, "y": 0, "z": 0}], [], {"smoke"}, 64)
     assert lone[0]["side"] is None and lone[0]["thrower"] is None
+
+
+def test_money_follows_purchases(dust2_mini, tmp_path):
+    import polars as pl
+
+    d = tmp_path / "m"
+    shutil.copytree(dust2_mini, d)
+    freeze_end = pl.read_parquet(d / "rounds.parquet").filter(pl.col("round_num") == 5)["freeze_end_tick"][0]
+    # replay frames with a balance: $4000 in the freeze time, $800 left after buying, one frame without a value
+    snaps = pl.read_parquet(d / "snapshots.parquet")
+    gap = snaps.filter(pl.col("tick") > freeze_end)["tick"].min()
+    money = pl.when(pl.col("tick") < freeze_end - 640).then(4000).otherwise(800)
+    frames = snaps.select(
+        "tick", "steamid", "name", "side", "x", "y", "z", "yaw", "health", "armor", "has_bomb", "active_weapon",
+        money=pl.when(pl.col("tick") == gap).then(None).otherwise(money),
+    )
+    frames.write_parquet(d / "replay.parquet")
+    doc = build_round(load_match(d, extra_tables=("smokes", "fires", "grenades", "blinds", "shots", "damages")), 5)
+    ticks = doc["ticks"]
+    for p in doc["players"]:
+        assert len(p["money"]) == len(ticks)
+        assert p["money"][0] == 4000 and p["money"][-1] == 800  # the balance at each frame, not the round start
+        assert p["money"][ticks.index(gap)] == 800  # a gap keeps the previous value

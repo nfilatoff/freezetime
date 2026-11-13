@@ -455,7 +455,7 @@ export interface ReplayPlayer {
   bomb: number[];
   weapon: number[];
   defusing: number[] | null;
-  money: number | null;
+  money: number[] | null; // the balance at every frame
   inv: [number, number][] | null; // [tick, index into Replay.items] at every inventory change
 }
 
