@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, type BoardMark, type BoardPos, type MatchOverview, type Note, type Replay, type TimelineRound } from "../api";
+import { api, type BoardMark, type BoardPos, type MatchOverview, type Note, type Replay, type ReplayPlayer, type TimelineRound } from "../api";
 import { go } from "../router";
 import { PEN_COLORS, PEN_WIDTHS, boardFromFrame, drawMarks, emptyBoard, hitTest, newId, startMark, stashDraft, strayMark, stretchMark } from "../board";
 import { useFitHeight } from "../fit";
 import { CT_COLOR, RADAR_SIZE, T_COLOR, levelLabel, levelOf, panelLevels, sideColor, sideShort, useMapAssets, worldToPx } from "../radar";
 import {
-  BOMB_TIME, NO_VIEW, ROUND_TIME, bombState, drawRound, fmtClock, fmtMoney, frameAt, killAt, loadReplay, panBy, playerStates, throwAt, toRadar, weaponName, zoomAt,
+  BOMB_TIME, NO_VIEW, attackerBlind, ROUND_TIME, bombState, drawRound, fmtClock, fmtMoney, frameAt, killAt, loadReplay, panBy, playerStates, throwAt, toRadar, weaponName, zoomAt,
   type PlayerState, type View,
 } from "../replayDraw";
 import { useCalloutMode } from "../callouts";
@@ -14,6 +14,7 @@ import { buyLabel } from "../clipSummary";
 import { CalloutToggle } from "./CalloutToggle";
 import { ToolIcon } from "./Icons";
 import { NadeIcon } from "./NadeIcon";
+import { FeedIcon, WeaponIcon } from "./WeaponIcon";
 import { KillCard } from "./KillCard";
 import { shareUrl } from "../share";
 import { NoteForm, RoundNotes, StarForm } from "./ReplayExtras";
@@ -54,7 +55,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [view, setView] = useState<number | "all">("all");
-  const [opts, setOpts] = useState({ names: true, weapons: false, trails: true, shots: true, flashMarks: true, damage: true });
+  const [opts, setOpts] = useState({ names: true, weapons: false, trails: true, shots: true, flashMarks: true, damage: true, spotted: true });
   const [zoom, setZoom] = useState<View>(NO_VIEW); // the same for every round of the match
   const [zoomLocked, setZoomLocked] = useState(false);
   const pan = useRef<{ x: number; y: number; from: View; moved: boolean } | null>(null);
@@ -63,6 +64,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
   const [stage, setStage] = useState<HTMLDivElement | null>(null);
   const callouts = useCalloutMode();
   const [hover, setHover] = useState<{ kill: number; x: number; y: number } | null>(null);
+  const [hoverPlayer, setHoverPlayer] = useState<string | null>(null);
   const [hoverThrow, setHoverThrow] = useState<{ g: number; x: number; y: number } | null>(null);
   const [drawing, setDrawing] = useState(false);
   const [tool, setTool] = useState<SketchTool>("pen");
@@ -101,6 +103,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
 
   useEffect(() => {
     setData(null);
+    setHoverPlayer(null);
     setError(null);
     const t0 = performance.now();
     loadReplay(match.id, round)
@@ -172,12 +175,12 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawRound(ctx, assets, data, tickRef.current, levels, size, {
-      ...opts, callouts: callouts !== "off", hoverKill: hover?.kill ?? -1, throwPoints: true, hoverThrow: hoverThrow?.g ?? -1, view: zoom,
+      ...opts, callouts: callouts !== "off", hoverKill: hover?.kill ?? -1, throwPoints: true, hoverThrow: hoverThrow?.g ?? -1, hoverPlayer: hoverPlayer ?? undefined, view: zoom,
     });
     const draft = stroke.current?.mark;
     drawMarks(ctx, assets.meta, draft ? [...marksRef.current, draft] : marksRef.current, levels, size, zoom);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assets, data, size, levels.join(","), opts, callouts, hover?.kill, hoverThrow?.g, marks, zoom]);
+  }, [assets, data, size, levels.join(","), opts, callouts, hover?.kill, hoverThrow?.g, hoverPlayer, marks, zoom]);
 
   useEffect(render, [render, uiTick]);
 
@@ -255,6 +258,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
     const li = levels[panel];
     if (li === undefined) {
       setHover(null);
+      setHoverPlayer(null);
       return setHoverThrow(null);
     }
     const k = size / RADAR_SIZE;
@@ -266,6 +270,17 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
     setHover(i >= 0 ? { kill: i, x, y } : null);
     const g = i >= 0 ? -1 : throwAt(data, tickRef.current, P, rx, ry, s, (z) => !multi || levelOf(assets.meta, z) === li);
     setHoverThrow(g >= 0 ? { g, x, y } : null);
+    // a living player under the pointer: who sees whom
+    let near: string | null = null, best = (12 * s) ** 2;
+    if (i < 0 && g < 0) {
+      for (const st of playerStates(data, tickRef.current)) {
+        if (st.hp <= 0 || Number.isNaN(st.x) || (multi && levelOf(assets.meta, st.z) !== li)) continue;
+        const [px, py] = P(st.x, st.y);
+        const d = (px - rx) ** 2 + (py - ry) ** 2;
+        if (d < best) { best = d; near = st.p.steamid; }
+      }
+    }
+    setHoverPlayer(near);
   };
   const onStageClick = () => {
     if (panned.current) {
@@ -516,6 +531,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
         <label className="small"><input type="checkbox" checked={opts.shots} onChange={(e) => setOpts({ ...opts, shots: e.target.checked })} /> {t("replay.shots")}</label>
         <label className="small" title={t("replay.flashMarksTitle")}><input type="checkbox" checked={opts.flashMarks} onChange={(e) => setOpts({ ...opts, flashMarks: e.target.checked })} /> {t("replay.flashMarks")}</label>
         <label className="small" title={t("replay.damageNumsTitle")}><input type="checkbox" checked={opts.damage} onChange={(e) => setOpts({ ...opts, damage: e.target.checked })} /> {t("replay.damageNums")}</label>
+        <label className="small" title={t("replay.spottedTitle")}><input type="checkbox" checked={opts.spotted} onChange={(e) => setOpts({ ...opts, spotted: e.target.checked })} /> {t("replay.spotted")}</label>
         <CalloutToggle meta={assets?.meta} />
         <span className="seg zoom-ctl">
           <button className={zoomLocked ? "on" : ""} title={t("replay.zoomLockTitle")} onClick={() => setZoomLocked((v) => !v)}>
@@ -528,7 +544,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
       </div>
 
       <div className="replay-body">
-        <TeamPanel states={states.filter((s) => s.p.side === "counter-terrorist")} head={ct} title={ct.name ?? "CT"} color={CT_COLOR} onCopy={copyPlayer} tally={tally} height={size} />
+        <TeamPanel states={states.filter((s) => s.p.side === "counter-terrorist")} head={ct} title={ct.name ?? "CT"} color={CT_COLOR} onCopy={copyPlayer} tally={tally} height={size} all={data?.players ?? []} />
         <div className="replay-stage" ref={boxRef}>
           {!data || !assets ? (
             <div className="muted" style={{ height: size }}>{t("replay.loadingRound")}</div>
@@ -544,6 +560,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
               onMouseMove={onStageMove}
               onMouseLeave={() => {
                 setHover(null);
+                setHoverPlayer(null);
                 setHoverThrow(null);
               }}
               onClick={onStageClick}
@@ -565,7 +582,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
             </div>
           )}
         </div>
-        <TeamPanel states={states.filter((s) => s.p.side === "terrorist")} head={tr} title={tr.name ?? "T"} color={T_COLOR} onCopy={copyPlayer} tally={tally} height={size} />
+        <TeamPanel states={states.filter((s) => s.p.side === "terrorist")} head={tr} title={tr.name ?? "T"} color={T_COLOR} onCopy={copyPlayer} tally={tally} height={size} all={data?.players ?? []} />
       </div>
 
       {data && (
@@ -737,7 +754,7 @@ function PlayerTally({ dmg, kills }: { dmg: number; kills: number }) {
   );
 }
 
-function TeamPanel({ states, head, title, color, onCopy, tally, height }: { states: PlayerState[]; head: SideSummary; title: string; color: string; onCopy: (s: PlayerState) => void; tally: Map<string, { dmg: number; kills: number }>; height: number }) {
+function TeamPanel({ states, head, title, color, onCopy, tally, height, all }: { states: PlayerState[]; head: SideSummary; title: string; color: string; onCopy: (s: PlayerState) => void; tally: Map<string, { dmg: number; kills: number }>; height: number; all: ReplayPlayer[] }) {
   // as tall as the radar at most, so the players never push the timeline and controls off the screen
   return (
     <div className="team-panel" style={{ maxHeight: height }}>
@@ -760,8 +777,9 @@ function TeamPanel({ states, head, title, color, onCopy, tally, height }: { stat
           onClick={() => s.hp > 0 && !Number.isNaN(s.x) && onCopy(s)}
         >
           <div className="pl-top">
-            <span className="pl-name">{s.p.name}</span>
+            <span className="pl-name">{s.hp <= 0 && <span className="pl-dead" title={t("pl.dead")}>✕</span>}{s.p.name}</span>
             <span className="pl-icons">
+              {s.hp > 0 && s.seen !== 0 && <FeedIcon id="spotted" color="#ffec78" size={11} title={t("pl.seenBy", { names: all.filter((_, j) => (s.seen >> j) & 1).map((q) => q.name).join(", ") })} />}
               {s.bomb && <span title={t("pl.bomb")}>💣</span>}
               {s.kit && <span title={t("pl.kit")}>✂</span>}
               {s.armor > 0 && <span title={t("pl.armor", { n: s.armor })}>{s.helmet ? "⛑" : "🛡"}</span>}
@@ -769,17 +787,17 @@ function TeamPanel({ states, head, title, color, onCopy, tally, height }: { stat
           </div>
           <div className="hp"><div style={{ width: `${s.hp}%`, background: color }} /><span>{s.hp}</span></div>
           <div className="pl-weapon">
-            <span>{[
-              // the active gun is highlighted in the inventory line below; other active items are named here
-              s.hp <= 0 ? "DEAD" : s.p.inv && (s.weapon === s.primary || s.weapon === s.secondary) ? null : weaponName(s.weapon),
-              s.money !== null ? `$${s.money}` : null,
-            ].filter(Boolean).join(" · ")}</span>
+            <span className="pl-active">
+              {/* the active gun is highlighted in the inventory line below; other active items show here */}
+              {s.hp > 0 && s.weapon && !(s.p.inv && (s.weapon === s.primary || s.weapon === s.secondary)) && <WeaponIcon weapon={s.weapon} color="var(--text)" size={11} />}
+              {s.money !== null && <span>${s.money}</span>}
+            </span>
             <PlayerTally {...(tally.get(s.p.steamid) ?? { dmg: 0, kills: 0 })} />
           </div>
           {s.hp > 0 && (s.primary || s.secondary || s.nades.length > 0) && (
             <div className="pl-inv">
-              {[s.primary, s.secondary].filter(Boolean).map((w) => (
-                <span key={w} className={w === s.weapon ? "on" : ""}>{weaponName(w)}</span>
+              {[s.primary, s.secondary].filter((w): w is string => !!w).map((w) => (
+                <span key={w} className={w === s.weapon ? "wi on" : "wi"}><WeaponIcon weapon={w} color="var(--text)" size={11} /></span>
               ))}
               {s.nades.map((n, i) => <NadeIcon key={i} type={n} color="var(--text)" size={13} title={td(`board.nade.${n}`, n)} />)}
             </div>
@@ -796,10 +814,20 @@ function KillFeed({ r, tick }: { r: Replay; tick: number }) {
     <div className="killfeed">
       {recent.map((k, i) => (
         <div key={i} className="kill">
+          {attackerBlind(r, k) && <FeedIcon id="blind" color="#ddd" size={14} title={t("feed.blind")} />}
           <span style={{ color: sideColor(k.attacker_side) }}>{k.attacker_name ?? "World"}</span>
-          <span className="weapon">
-            {k.flashed ? "◐ " : ""}{weaponName(k.weapon)}{k.headshot ? " ⌖" : ""}{k.wallbang ? " ⇥" : ""}{k.thrusmoke ? " ☁" : ""}
-          </span>
+          {k.assister_name && (
+            <>
+              <span className="muted">+</span>
+              {k.flashed && <FeedIcon id="flashassist" color="#fff" size={14} title={t("feed.flashAssist")} />}
+              <span style={{ color: sideColor(k.attacker_side) }}>{k.assister_name}</span>
+            </>
+          )}
+          <WeaponIcon weapon={k.weapon} color="#fff" size={14} />
+          {k.noscope && <FeedIcon id="noscope" color="#fff" size={14} title={t("feed.noscope")} />}
+          {k.wallbang && <FeedIcon id="wallbang" color="#fff" size={14} title={t("feed.wallbang")} />}
+          {k.thrusmoke && <FeedIcon id="smoke" color="#fff" size={14} title={t("feed.smoke")} />}
+          {k.headshot && <FeedIcon id="headshot" color="#fff" size={14} title={t("feed.headshot")} />}
           <span style={{ color: sideColor(k.victim_side) }}>{k.victim_name}</span>
         </div>
       ))}

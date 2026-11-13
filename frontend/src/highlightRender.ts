@@ -3,7 +3,8 @@
 // action happens, and a kill feed. Drawn the same way for the preview and for the export.
 import type { Highlight, MatchOverview, Replay } from "./api";
 import { RADAR_SIZE, levelOf, panelLevels, sideColor, worldToPx, type MapAssets } from "./radar";
-import { drawRound, playerState, weaponName } from "./replayDraw";
+import { drawRound, playerState, weaponName, attackerBlind } from "./replayDraw";
+import { drawFeedIcon, drawWeaponIcon, feedIconWidth, weaponIconWidth, type FeedId } from "./weaponIcons";
 import { clockOf } from "./clipSummary";
 import { mapPretty } from "./components/MatchPicker";
 import { t, td } from "./i18n";
@@ -116,7 +117,7 @@ export function drawHighlight(ctx: CanvasRenderingContext2D, assets: MapAssets, 
   ctx.fillRect(0, 0, f.width, f.height);
 
   // radar
-  const opts = { names: f.names, weapons: false, trails: true, shots: true, hoverKill: -1, focus: f.focus, damage: false };
+  const opts = { names: f.names, weapons: false, trails: true, shots: true, hoverKill: -1, focus: f.focus, damage: false, spotted: false };
   ctx.save();
   ctx.translate(0, headerH);
   ctx.beginPath();
@@ -160,18 +161,34 @@ export function drawHighlight(ctx: CanvasRenderingContext2D, assets: MapAssets, 
 
 function drawKillFeed(ctx: CanvasRenderingContext2D, f: HlFrame, tick: number, u: number) {
   const recent = f.r.kills.filter((k) => k.tick <= tick && tick - k.tick < KILLFEED_SEC * f.r.tick_rate).slice(-5);
-  const font = `600 ${14 * u}px system-ui, sans-serif`;
+  const gap = 7 * u, ih = 14 * u, h = 24 * u;
   let y = f.headerH + 12 * u;
   for (const k of recent) {
-    const parts: [string, string][] = [
-      [k.attacker_name ?? "World", sideColor(k.attacker_side)],
-      [`${weaponName(k.weapon)}${k.headshot ? " ⌖" : ""}${k.wallbang ? " ⇥" : ""}${k.thrusmoke ? " ☁" : ""}`, "#ddd"],
-      [k.victim_name, sideColor(k.victim_side)],
-    ];
-    ctx.font = font;
-    const gap = 9 * u;
-    const w = parts.reduce((s, [text]) => s + ctx.measureText(text).width, 0) + gap * 2 + 20 * u;
-    const h = 24 * u;
+    // a row is a list of pieces with a width and a draw(x, centreY) each
+    type Piece = [number, (x: number, cy: number) => void];
+    ctx.font = `600 ${14 * u}px system-ui, sans-serif`;
+    const text = (s: string, color: string): Piece => [ctx.measureText(s).width, (x, cy) => { ctx.fillStyle = color; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillText(s, x, cy + 5 * u); }];
+    const feed = (id: FeedId, color = "#fff"): Piece => { const w = feedIconWidth(id, ih); return [w, (x, cy) => drawFeedIcon(ctx, id, x + w / 2, cy, ih, color)]; };
+    const gun = (): Piece => {
+      const w = weaponIconWidth(k.weapon, ih);
+      if (w === null) return text(weaponName(k.weapon), "#fff");
+      return [w, (x, cy) => drawWeaponIcon(ctx, k.weapon, x + w / 2, cy, ih, "#fff")];
+    };
+    const pieces: Piece[] = [];
+    if (attackerBlind(f.r, k)) pieces.push(feed("blind", "#ddd"));
+    pieces.push(text(k.attacker_name ?? "World", sideColor(k.attacker_side)));
+    if (k.assister_name) {
+      pieces.push(text("+", "#aaa"));
+      if (k.flashed) pieces.push(feed("flashassist"));
+      pieces.push(text(k.assister_name, sideColor(k.attacker_side)));
+    }
+    pieces.push(gun());
+    if (k.noscope) pieces.push(feed("noscope"));
+    if (k.wallbang) pieces.push(feed("wallbang"));
+    if (k.thrusmoke) pieces.push(feed("smoke"));
+    if (k.headshot) pieces.push(feed("headshot"));
+    pieces.push(text(k.victim_name, sideColor(k.victim_side)));
+    const w = pieces.reduce((n, [pw]) => n + pw, 0) + gap * (pieces.length - 1) + 20 * u;
     const x = f.width - 10 * u - w;
     const mine = (k.attacker && f.focus.has(k.attacker)) || f.focus.has(k.victim);
     ctx.fillStyle = "rgba(0,0,0,0.72)";
@@ -182,11 +199,9 @@ function drawKillFeed(ctx: CanvasRenderingContext2D, f: HlFrame, tick: number, u
       ctx.strokeRect(x + u, y + u, w - 2 * u, h - 2 * u);
     }
     let cx = x + 10 * u;
-    ctx.textAlign = "left";
-    for (const [text, color] of parts) {
-      ctx.fillStyle = color;
-      ctx.fillText(text, cx, y + 17 * u);
-      cx += ctx.measureText(text).width + gap;
+    for (const [pw, draw] of pieces) {
+      draw(cx, y + h / 2);
+      cx += pw + gap;
     }
     y += h + 4 * u;
   }

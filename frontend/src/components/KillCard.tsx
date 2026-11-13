@@ -47,6 +47,8 @@ export function KillCard({ r, kill, x, y, maxX }: { r: Replay; kill: ReplayKill;
           {kill.hitgroup && <tr><td>{t("kc.finalHit")}</td><td className="num">{td(`hit.${kill.hitgroup}`, kill.hitgroup)}</td></tr>}
           {kill.victim_weapon && <tr><td>{t("kc.victimWeapon")}</td><td className="num">{weaponName(kill.victim_weapon)}</td></tr>}
           {duelSec !== null && duelSec > 0 && <tr><td>{t("kc.duel")}</td><td className="num">{t("common.sec", { n: duelSec.toFixed(1) })}</td></tr>}
+          {kill.reaction != null && <tr title={t("kc.reactionNote")}><td>{t("kc.reaction", { name: kill.attacker_name ?? "" })}</td><td className="num">{t("common.sec", { n: kill.reaction.toFixed(2) })}</td></tr>}
+          {kill.victim_reaction != null && <tr title={t("kc.reactionNote")}><td>{t("kc.reaction", { name: kill.victim_name })}</td><td className="num">{t("common.sec", { n: kill.victim_reaction.toFixed(2) })}</td></tr>}
           {kill.assister_name && <tr><td>{t("kc.assist")}</td><td className="num">{kill.assister_name}</td></tr>}
         </tbody>
       </table>

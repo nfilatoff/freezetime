@@ -6,15 +6,21 @@ Hits are tied to shots by time, not by weapon name: ``player_hurt`` names some g
 ``weapon_fire`` (an M4A1-S hit says ``m4a1``, like the M4A4; a USP-S hit says ``hkp2000``), so every
 bullet hit is matched to the attacker's last shot at or before it (``HIT_WINDOW`` ticks). A shot that hit
 anyone counts once, so shotgun pellets don't inflate accuracy.
+
+``reaction`` is the approximate time from an enemy coming into the player's view to their first shot at them
+(``freezetime.visibility``); None when the map's mesh is not cached.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from statistics import mean, median
 
 import polars as pl
 
 from freezetime.context import load_match, pct, with_round
+from freezetime.replay import round_frames
+from freezetime.visibility import checker, reaction_times
 
 HIT_WINDOW = 8  # ticks between a shot and its damage event
 NOT_GUNS = ("knife", "bayonet", "grenade", "flashbang", "molotov", "incgrenade", "decoy", "c4", "inferno", "world", "taser")
@@ -30,9 +36,25 @@ def _gun(col: str = "weapon") -> pl.Expr:
     return ~pl.any_horizontal([name.str.contains(w, literal=True) for w in NOT_GUNS]) & name.is_not_null() & (name != "")
 
 
+def _reactions(m) -> dict[str, list[float]] | None:
+    """Every reaction time of the match's real rounds per attacker, or None without a visibility mesh."""
+    chk = checker(m.map_name)
+    if chk is None:
+        return None
+    out: dict[str, list[float]] = {}
+    for r in m.rounds.iter_rows(named=True):
+        lo, hi = int(r["freeze_end_tick"]), int(r["end_tick"])
+        frames, _ = round_frames(m, lo, hi)
+        smokes = m.data["smokes"].filter((pl.col("start_tick") <= hi) & (pl.col("end_tick") >= lo) & pl.col("x").is_not_null() & pl.col("y").is_not_null()).select("start_tick", "end_tick", "x", "y").rows()
+        for e in reaction_times(frames, smokes, m.data["damages"].filter(pl.col("tick").is_between(lo, hi)),
+                                m.data["shots"].filter(pl.col("tick").is_between(lo, hi)), chk, m.tick_rate):
+            out.setdefault(e["attacker"], []).append(e["reaction"])
+    return out
+
+
 def player_stats(directory: str | Path) -> dict[str, dict]:
-    """``{steamid: {"weapons": [...], "accuracy": {...}, "flashes": {...}}}`` for every player of the match."""
-    m = load_match(directory, ("shots", "damages", "blinds"))
+    """``{steamid: {"weapons": [...], "accuracy": {...}, "flashes": {...}, "reaction": {...}}}`` for every player of the match."""
+    m = load_match(directory, ("shots", "damages", "blinds", "smokes"))
     sid = lambda c: pl.col(c).cast(pl.Utf8)  # noqa: E731
     out: dict[str, dict] = {}
 
@@ -87,6 +109,7 @@ def player_stats(directory: str | Path) -> dict[str, dict]:
     thrown = m.data["shots"].filter(pl.col("weapon").cast(pl.Utf8) == "weapon_flashbang")
     thrown = with_round(thrown, m.rounds).group_by(sid("steamid").alias("steamid")).agg(thrown=pl.len())
 
+    reactions = _reactions(m)
     players = m.teams.select(sid("steamid").alias("steamid"))["steamid"].to_list()
     for steamid in players:
         w = weapons.filter(pl.col("steamid") == steamid).drop("steamid")
@@ -107,5 +130,10 @@ def player_stats(directory: str | Path) -> dict[str, dict]:
                 "hs_accuracy": round(head / total_hits * 100, 1) if total_hits else None,
             },
             "flashes": fl,
+            "reaction": None if reactions is None else {
+                "count": len(times := reactions.get(steamid, [])),
+                "median": round(median(times), 3) if times else None,
+                "mean": round(mean(times), 3) if times else None,
+            },
         }
     return out

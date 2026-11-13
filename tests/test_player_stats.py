@@ -22,3 +22,12 @@ def test_player_stats(dust2_mini):
         if f["enemies_blinded"]:
             assert 0 < f["enemy_blind_avg"] <= 6
     assert any(p["flashes"]["enemies_blinded"] for p in stats.values())
+
+
+def test_reaction_block(dust2_mini):
+    for p in player_stats(dust2_mini).values():
+        r = p["reaction"]  # None without a cached map mesh
+        if r is not None:
+            assert set(r) == {"count", "median", "mean"}
+            assert (r["count"] == 0) == (r["median"] is None)
+            assert r["median"] is None or 0 <= r["median"] <= 1.5

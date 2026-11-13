@@ -4,6 +4,7 @@
 import { api, type Replay, type ReplayKill, type ReplayPlayer } from "./api";
 import { drawCallouts } from "./callouts";
 import { drawNadeIcon } from "./nadeIcons";
+import { drawWeaponIcon } from "./weaponIcons";
 import { RADAR_SIZE, drawRadar, levelLabel, levelOf, sideColor, worldToPx, type MapAssets } from "./radar";
 
 export const SMOKE_RADIUS = 144; // world units
@@ -29,6 +30,17 @@ const WEAPON_NAMES: Record<string, string> = {
 };
 export const weaponName = (w: string | null | undefined) =>
   !w ? "" : w.startsWith("knife") || w === "bayonet" ? "Knife" : WEAPON_NAMES[w] ?? w;
+const blindCache = new WeakMap<ReplayKill, boolean>();
+/** Was the killer blinded by a flash when the kill happened (computed once per kill). */
+export function attackerBlind(r: Replay, k: ReplayKill): boolean {
+  let v = blindCache.get(k);
+  if (v === undefined) {
+    const p = k.attacker ? r.players.find((q) => q.steamid === k.attacker) : undefined;
+    v = !!p && playerState(r, p, k.tick).flash > 0.3;
+    blindCache.set(k, v);
+  }
+  return v;
+}
 export const nadeOfItem = (item: string) => ITEM_NADE[item];
 
 // ---- data cache: rounds kept in memory, shared by the replay and the clip builder ----
@@ -92,6 +104,7 @@ export interface PlayerState {
   defusing: boolean;
   money: number | null;
   flash: number; // 0..1 remaining blindness
+  seen: number; // bit j set: enemy players[j] sees this player (see ReplayPlayer.seen_by)
 }
 
 function inventoryAt(r: Replay, p: ReplayPlayer, tick: number): (string | null)[] | null {
@@ -125,6 +138,7 @@ export function playerState(r: Replay, p: ReplayPlayer, tick: number): PlayerSta
     defusing: !!p.defusing?.[i],
     money: p.money?.[i] ?? null,
     flash: Math.min(1, flash),
+    seen: p.seen_by?.[i] ?? 0,
   };
 }
 
@@ -179,6 +193,7 @@ export interface PlayerStyle {
   shooting: boolean;
   bombOutline?: boolean;
   hurt?: boolean; // just took damage: red name and outline
+  spotted?: boolean; // an enemy sees the player: a thin ring
 }
 
 const RAD = 6.5; // player icon radius, screen px
@@ -221,6 +236,13 @@ export function drawPlayer(ctx: Ctx, st: PlayerState, px: number, py: number, s:
     ctx.stroke();
   }
   ctx.globalAlpha = a;
+  if (style.spotted && st.seen) {
+    ctx.strokeStyle = "rgba(255,236,120,0.9)";
+    ctx.lineWidth = 1.3 * s;
+    ctx.beginPath();
+    ctx.arc(px, py, RAD * s + 3 * s, 0, Math.PI * 2);
+    ctx.stroke();
+  }
   if (st.flash > 0.05) {
     ctx.fillStyle = `rgba(255,255,255,${0.85 * st.flash})`;
     ctx.beginPath();
@@ -258,7 +280,7 @@ export function drawPlayer(ctx: Ctx, st: PlayerState, px: number, py: number, s:
   if (style.weapon) {
     let y = by + 13 * s;
     if (st.weapon) {
-      outlinedText(ctx, weaponName(st.weapon), px, y, s, 9, "#e8edf2", true);
+      drawWeaponIcon(ctx, st.weapon, px, y - 3 * s, 9 * s, "#fff", "rgba(0,0,0,0.85)", weaponName(st.weapon));
       y += 3 * s;
     }
     const pips = [...st.nades, ...(st.bomb ? ["c4"] : []), ...(st.kit ? ["kit"] : [])];
@@ -270,6 +292,34 @@ export function drawPlayer(ctx: Ctx, st: PlayerState, px: number, py: number, s:
     }
   }
   ctx.globalAlpha = 1;
+}
+
+/** Dashed lines between the hovered player and the enemies that see it or are seen by it, in the viewer's colour. */
+function drawSightLines(ctx: Ctx, states: PlayerState[], id: string, P: (x: number, y: number) => [number, number], s: number, vis: (z: number | undefined) => number) {
+  const h = states.findIndex((st) => st.p.steamid === id);
+  if (h < 0 || states[h].hp <= 0 || Number.isNaN(states[h].x)) return;
+  ctx.save();
+  ctx.setLineDash([4 * s, 3 * s]);
+  ctx.lineWidth = 1.2 * s;
+  const me = states[h];
+  const [x2, y2] = P(me.x, me.y);
+  states.forEach((e, j) => {
+    if (j === h || e.p.side === me.p.side || e.hp <= 0 || Number.isNaN(e.x)) return;
+    const [x1, y1] = P(e.x, e.y);
+    ctx.globalAlpha = 0.85 * Math.min(vis(e.z), vis(me.z));
+    // the enemy sees the player; the player sees the enemy (nudged, so both lines show when the sight is mutual)
+    const sights: [PlayerState, number][] = [];
+    if ((me.seen >> j) & 1) sights.push([e, 0]);
+    if ((e.seen >> h) & 1) sights.push([me, sights.length ? 2.5 * s : 0]);
+    for (const [viewer, off] of sights) {
+      ctx.strokeStyle = sideColor(viewer.p.side);
+      ctx.beginPath();
+      ctx.moveTo(x1 + off, y1 + off);
+      ctx.lineTo(x2 + off, y2 + off);
+      ctx.stroke();
+    }
+  });
+  ctx.restore();
 }
 
 const nadeName = (weapon: string) => ITEM_NADE[weapon] ?? null;
@@ -566,6 +616,8 @@ export interface RoundDrawOpts {
   levelLabels?: boolean; // level names in the panel corner (default true)
   callouts?: boolean; // position names over the radar, under everything else
   flashMarks?: boolean; // where flashes popped, for a few seconds (default true)
+  spotted?: boolean; // a ring around players an enemy sees (default true)
+  hoverPlayer?: string; // steamid: dashed lines to the enemies who see it and the ones it sees
   damage?: boolean; // floating damage numbers over the victims (default true); the red flash is always on
   view?: View; // zoom and pan, the same for every panel (default: the whole radar)
 }
@@ -742,11 +794,12 @@ export function drawRound(ctx: CanvasRenderingContext2D, assets: MapAssets, r: R
       drawPlayer(ctx, st, px, py, s, tick, {
         color: sideColor(st.p.side), alpha: vis(st.z), label: opts.names || focused(st) ? st.p.name : null,
         weapon: opts.weapons || focused(st), cone: true, shooting: shooting.has(st.p.steamid),
-        hurt: (hurts.get(st.p.steamid)?.age ?? Infinity) < HURT_FLASH_SEC,
+        hurt: (hurts.get(st.p.steamid)?.age ?? Infinity) < HURT_FLASH_SEC, spotted: opts.spotted !== false,
       });
       const hit = hurts.get(st.p.steamid);
       if (hit && opts.damage !== false) drawHurtNumber(ctx, px, py, s, hit, vis(st.z));
     }
+    if (opts.hoverPlayer) drawSightLines(ctx, states, opts.hoverPlayer, P, s, vis);
     // the killing blow: its victim is no longer drawn, so the number goes to the place of death
     if (opts.damage !== false) {
       const shown = new Set(states.filter((st) => st.hp > 0 && !Number.isNaN(st.x)).map((st) => st.p.steamid));

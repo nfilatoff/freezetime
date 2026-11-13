@@ -93,6 +93,7 @@ export interface PlayerStats {
     teammates_blinded: number;
     teammate_blind_avg: number | null;
   };
+  reaction: { count: number; median: number | null; mean: number | null } | null; // seconds, estimated from line of sight
 }
 
 export interface TacticsResult {
@@ -456,6 +457,7 @@ export interface ReplayPlayer {
   weapon: number[];
   defusing: number[] | null;
   money: number[] | null; // the balance at every frame
+  seen_by: number[] | null; // per frame: bit j set = enemy players[j] sees this player (null without a map mesh)
   inv: [number, number][] | null; // [tick, index into Replay.items] at every inventory change
 }
 
@@ -504,6 +506,8 @@ export interface ReplayKill {
   vy: number;
   vz: number;
   assister_name: string | null;
+  reaction: number | null; // s from the victim coming into view to the killer's first shot (estimate)
+  victim_reaction: number | null; // s for the victim to shoot back, if they did
   hitgroup: string | null;
   trade: boolean;
   traded: boolean;
