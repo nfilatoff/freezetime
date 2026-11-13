@@ -26,6 +26,7 @@ graphify-out
 .vscode/
 .idea/
 .claude/
+.codex/
 Thumbs.db
 desktop.ini
 start-freezetime.cmd
