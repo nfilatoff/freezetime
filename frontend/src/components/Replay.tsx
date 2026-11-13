@@ -5,7 +5,7 @@ import { PEN_COLORS, PEN_WIDTHS, boardFromFrame, drawMarks, emptyBoard, hitTest,
 import { useFitHeight } from "../fit";
 import { CT_COLOR, RADAR_SIZE, T_COLOR, levelLabel, levelOf, panelLevels, sideColor, sideShort, useMapAssets, worldToPx } from "../radar";
 import {
-  BOMB_TIME, NADE_COLORS, NO_VIEW, ROUND_TIME, bombState, drawRound, fmtClock, fmtMoney, frameAt, killAt, loadReplay, panBy, playerStates, throwAt, toRadar, weaponName, zoomAt,
+  BOMB_TIME, NO_VIEW, ROUND_TIME, bombState, drawRound, fmtClock, fmtMoney, frameAt, killAt, loadReplay, panBy, playerStates, throwAt, toRadar, weaponName, zoomAt,
   type PlayerState, type View,
 } from "../replayDraw";
 import { useCalloutMode } from "../callouts";
@@ -13,6 +13,7 @@ import { reasonLabel, t, td, type Key } from "../i18n";
 import { buyLabel } from "../clipSummary";
 import { CalloutToggle } from "./CalloutToggle";
 import { ToolIcon } from "./Icons";
+import { NadeIcon } from "./NadeIcon";
 import { KillCard } from "./KillCard";
 import { shareUrl } from "../share";
 import { NoteForm, RoundNotes, StarForm } from "./ReplayExtras";
@@ -780,7 +781,7 @@ function TeamPanel({ states, head, title, color, onCopy, tally, height }: { stat
               {[s.primary, s.secondary].filter(Boolean).map((w) => (
                 <span key={w} className={w === s.weapon ? "on" : ""}>{weaponName(w)}</span>
               ))}
-              {s.nades.map((n, i) => <i key={i} className="nade" style={{ background: NADE_COLORS[n] }} title={n} />)}
+              {s.nades.map((n, i) => <NadeIcon key={i} type={n} color="var(--text)" size={13} title={td(`board.nade.${n}`, n)} />)}
             </div>
           )}
         </div>
@@ -843,10 +844,12 @@ function Timeline({ r, tick, onSeek, notes }: { r: Replay; tick: number; onSeek:
       {r.grenades.filter((g) => g.type !== "decoy").map((g, i) => (
         <div
           key={`g${i}`}
-          className={`tl-nade ${g.type}`}
-          style={{ left: pct(g.t[0]), background: NADE_COLORS[g.type] ?? "#ccc", borderColor: g.side ? sideColor(g.side) : "#888" }}
+          className="tl-nade"
+          style={{ left: pct(g.t[0]) }}
           title={t("tl.nade", { nade: td(`nade.${g.type}`, g.type), who: r.players.find((p) => p.steamid === g.thrower)?.name ?? "?" })}
-        />
+        >
+          <NadeIcon type={g.type} color={g.side ? sideColor(g.side) : "#888"} size={12} />
+        </div>
       ))}
       {r.bomb.filter((b) => b.event === "finish_plant" || b.event === "defuse").map((b, i) => (
         <div key={i} className="tl-bomb" style={{ left: pct(b.tick) }} title={b.event === "defuse" ? t("tl.defuse") : t("tl.plant", { site: b.site })}>

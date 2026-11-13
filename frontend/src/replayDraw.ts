@@ -3,6 +3,7 @@
 // sizes written as `n * s` stay n screen pixels at any zoom.
 import { api, type Replay, type ReplayKill, type ReplayPlayer } from "./api";
 import { drawCallouts } from "./callouts";
+import { drawNadeIcon } from "./nadeIcons";
 import { RADAR_SIZE, drawRadar, levelLabel, levelOf, sideColor, worldToPx, type MapAssets } from "./radar";
 
 export const SMOKE_RADIUS = 144; // world units
@@ -261,10 +262,10 @@ export function drawPlayer(ctx: Ctx, st: PlayerState, px: number, py: number, s:
       y += 3 * s;
     }
     const pips = [...st.nades, ...(st.bomb ? ["c4"] : []), ...(st.kit ? ["kit"] : [])];
-    const step = 6 * s;
+    const step = 8 * s;
     let x = px - ((pips.length - 1) * step) / 2;
     for (const n of pips) {
-      drawItemPip(ctx, n, x, y + 3.5 * s, s, st.weapon !== null && nadeName(st.weapon) === n);
+      drawItemPip(ctx, n, x, y + 4.5 * s, s, st.weapon !== null && nadeName(st.weapon) === n);
       x += step;
     }
   }
@@ -284,11 +285,7 @@ function drawItemPip(ctx: Ctx, item: string, x: number, y: number, s: number, ac
     ctx.strokeRect(x - r, y - r, 2 * r, 2 * r);
     return;
   }
-  ctx.fillStyle = NADE_COLORS[item] ?? "#ccc";
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
+  drawNadeIcon(ctx, item, x, y, 10 * s, active ? "#ffe27a" : "#fff", "#000");
 }
 
 const TRACER_TICKS = 10; // a tracer stays this long after the shot
@@ -443,13 +440,7 @@ export function drawGrenade(
     ctx.fill();
   } else {
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = color;
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 1 * s;
-    ctx.beginPath();
-    ctx.arc(hpx, hpy, 3.2 * s, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
+    drawNadeIcon(ctx, g.type, hpx, hpy, 10 * s, color, "#000");
   }
   ctx.globalAlpha = 1;
 }
@@ -473,9 +464,11 @@ export function drawThrowPoint(ctx: Ctx, g: Replay["grenades"][number], P: ToPx,
   ctx.arc(px, py, r, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
-  ctx.strokeStyle = highlight ? "#fff" : NADE_COLORS[g.type] ?? "#ccc";
+  const color = highlight ? "#fff" : NADE_COLORS[g.type] ?? "#ccc";
+  ctx.strokeStyle = color;
   ctx.lineWidth = (highlight ? 2.6 : 2) * s;
   ctx.stroke();
+  drawNadeIcon(ctx, g.type, px, py, 7 * s, color);
   ctx.globalAlpha = 1;
 }
 
