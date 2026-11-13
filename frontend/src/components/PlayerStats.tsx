@@ -53,6 +53,8 @@ export function PlayerStatsPanel({ matchId, player, onClose }: { matchId: string
               note={t("ps.blinded", { n: s.flashes.enemies_blinded, thrown: s.flashes.thrown, long: s.flashes.enemies_long })} />
             <Card label={t("ps.blindTotal")} value={`${s.flashes.enemy_blind_total.toFixed(1)} ${t("ps.sec")}`}
               note={t("ps.teamBlinded", { n: s.flashes.teammates_blinded, avg: sec(s.flashes.teammate_blind_avg) })} />
+            <Card label={t("ps.reaction")} value={s.reaction ? sec(s.reaction.median) : "—"} title={t("ps.reactionTitle")}
+              note={s.reaction ? t("ps.reactionNote", { n: s.reaction.count, avg: sec(s.reaction.mean) }) : "—"} />
           </div>
           <DataTable
             title={t("ps.weapons")}
@@ -66,9 +68,9 @@ export function PlayerStatsPanel({ matchId, player, onClose }: { matchId: string
   );
 }
 
-function Card({ label, value, note }: { label: string; value: string; note: string }) {
+function Card({ label, value, note, title }: { label: string; value: string; note: string; title?: string }) {
   return (
-    <div className="insight">
+    <div className="insight" title={title}>
       <div className="insight-label">{label}</div>
       <div className="ps-value">{value}</div>
       <div className="muted small">{note}</div>

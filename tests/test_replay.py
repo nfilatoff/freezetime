@@ -117,3 +117,15 @@ def test_hurts(dust2_mini):
     taken = sum(d for t, v, d in zip(h["tick"], h["victim"], h["dmg"]) if v == kill["victim"] and t <= kill["tick"])
     assert taken >= 90
     json.dumps(doc)
+
+
+def test_seen_by_and_reactions(dust2_mini):
+    m = load_match(dust2_mini, extra_tables=("smokes", "fires", "grenades", "blinds", "shots", "damages"))
+    doc = build_round(m, 5)
+    n = len(doc["ticks"])
+    for p in doc["players"]:
+        if p["seen_by"] is not None:  # None without a cached map mesh
+            assert len(p["seen_by"]) == n and all(0 <= x < 1 << len(doc["players"]) for x in p["seen_by"])
+    for k in doc["kills"]:
+        assert set(k) >= {"reaction", "victim_reaction"}
+        assert all(k[r] is None or 0 <= k[r] <= 1.5 for r in ("reaction", "victim_reaction"))

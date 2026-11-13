@@ -294,9 +294,10 @@ tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .equipment-icon, .nade-icon { display: inline-block; flex: none; vertical-align: middle; }
 .equipment-fallback { font-size: 10px; }
 .kill .weapon, .kc-weapon { display: inline-flex; align-items: center; gap: 3px; }
+.pl-dead { color: var(--muted); margin-right: 4px; }
+.weapon-icon { flex: none; }
 .killfeed { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; pointer-events: none; }
-.kill { background: rgba(0, 0, 0, 0.75); padding: 3px 9px; border-radius: 4px; font-size: 12px; display: flex; gap: 8px; }
-.kill .weapon { color: #ddd; }
+.kill { background: rgba(0, 0, 0, 0.75); padding: 3px 9px; border-radius: 4px; font-size: 12px; display: flex; gap: 6px; align-items: center; }
 .timeline { position: relative; height: 34px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin: 10px 0 8px; cursor: pointer; user-select: none; overflow: hidden; }
 .tl-freeze { position: absolute; top: 0; bottom: 0; left: 0; background: rgba(255, 255, 255, 0.05); }
 .tl-progress { position: absolute; top: 0; bottom: 0; left: 0; background: var(--accent-dim); }

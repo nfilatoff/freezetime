@@ -1,14 +1,17 @@
 """Compact per-round replay data for the app's 2D replay.
 
 One round becomes a JSON document with a shared tick grid and per-player arrays
-(``x``, ``y``, ``z``, ``yaw``, ``hp``, ``money``, ...), inventory changes, grenade trajectories (with the
+(``x``, ``y``, ``z``, ``yaw``, ``hp``, ``money``, ``seen_by``, ...), inventory changes, grenade trajectories (with the
 thrower's position and view angles at the release, for ``setpos``), smokes
-and fires with their real lifetimes and the thrower's side, blinds, kills with duel details, bomb events, shots
+and fires with their real lifetimes and the thrower's side, blinds, kills with duel details (including each side's estimated reaction time), bomb events, shots
 with their direction and hit point and damage hits (``hurts``: tick, attacker, victim, health taken, weapon). Documents are cached gzipped in
 ``<extract>/replay/round_<n>.v<FORMAT>.json.gz``.
 
 Frames come from ``replay.parquet`` (every few ticks, written by ``extract``); older
 extracts without it fall back to the 0.5 s snapshots. Inventories always come from the snapshots (they change rarely).
+
+``seen_by`` is an approximation from map geometry (``freezetime.visibility``): per frame, a bitmask of the indices
+(in ``players``) of the enemies that see the player; None when the map's mesh is not cached.
 """
 
 from __future__ import annotations
@@ -22,8 +25,9 @@ import polars as pl
 
 from freezetime.context import Match, load_match
 from freezetime.lineups import MATCH_DIST, MATCH_TICKS, WEAPON_TYPE
+from freezetime.visibility import checker, reaction_times, round_visibility
 
-FORMAT = 8  # bump when the document changes; old cache files are then ignored
+FORMAT = 9  # bump when the document changes; old cache files are then ignored
 PRE_FREEZE_SEC = 20.0  # replay starts at most this long before freeze end
 POST_END_SEC = 4.0  # and runs this long after the round end (capped by the official end)
 GRENADE_STEP = 2  # keep every n-th tick of grenade trajectories
@@ -64,6 +68,17 @@ def _ints(s: pl.Series) -> list:
     return s.cast(pl.Float64).round(0).cast(pl.Int32).to_list()
 
 
+def round_frames(m: Match, start: int, end: int) -> tuple[pl.DataFrame, int]:
+    """Player frames between two ticks (``replay.parquet``, else the snapshots) and the tick step between them."""
+    path = m.directory / "replay.parquet"
+    if path.exists():
+        frames = pl.scan_parquet(path).filter(pl.col("tick").is_between(start, end)).collect()
+        step = int(frames["tick"].unique().sort().diff().drop_nulls().min() or 1)
+    else:
+        frames, step = _in(m.data["snapshots"], "tick", start, end), m.snap_step
+    return frames.filter(pl.col("steamid").is_not_null() & (pl.col("steamid") != 0)), step
+
+
 def build_round(m: Match, round_num: int) -> dict:
     """Replay document for one round of a loaded match."""
     row = m.rounds.filter(pl.col("round_num") == round_num)
@@ -77,14 +92,7 @@ def build_round(m: Match, round_num: int) -> dict:
     if raw.get("official_end_tick"):
         end = min(end, int(raw["official_end_tick"]))
 
-    frames_path = m.directory / "replay.parquet"
-    if frames_path.exists():
-        frames = pl.scan_parquet(frames_path).filter(pl.col("tick").is_between(start, end)).collect()
-        step = int(frames["tick"].unique().sort().diff().drop_nulls().min() or 1)
-    else:
-        frames = _in(m.data["snapshots"], "tick", start, end)
-        step = m.snap_step
-    frames = frames.filter(pl.col("steamid").is_not_null() & (pl.col("steamid") != 0))
+    frames, step = round_frames(m, start, end)
     ticks = frames["tick"].unique().sort()
 
     sides = m.sides.filter(pl.col("round_num") == round_num).select("team", "side")
@@ -128,6 +136,16 @@ def build_round(m: Match, round_num: int) -> dict:
             "money": _ints(f["money"].forward_fill().backward_fill().fill_null(0)) if "money" in f.columns else None,
         })
 
+    smokes = [(a["start"], a["end"], a["x"], a["y"]) for a in _areas(m.data["smokes"], start, end) if a["x"] is not None and a["y"] is not None]
+    chk = checker(m.map_name)
+    seen_by = round_visibility(frames, smokes, chk, rate, [int(p["steamid"]) for p in players]) if chk else {}
+    for p in players:
+        p["seen_by"] = seen_by.get(int(p["steamid"]))
+    reactions = {}
+    if chk and "damages" in m.data:
+        shots = _in(m.data["shots"], "tick", start, end)
+        reactions = {(r["attacker"], r["victim"]): r["reaction"] for r in reaction_times(frames, smokes, _in(m.data["damages"], "tick", start, end), shots, chk, rate)}
+
     inventories = _inventories(m, start, end, roster["steamid"])
     items: dict[tuple, int] = {}
     for p in players:
@@ -148,7 +166,7 @@ def build_round(m: Match, round_num: int) -> dict:
         "winner_side": info["winner_side"],
         "reason": info["reason_name"],
         "step": step,
-        "low_res": not frames_path.exists(),
+        "low_res": not (m.directory / "replay.parquet").exists(),
         "ticks": ticks.to_list(),
         "teams": {r["side"]: r["team"] for r in sides.iter_rows(named=True)},
         "weapons": weapons,
@@ -183,7 +201,7 @@ def build_round(m: Match, round_num: int) -> dict:
                 "hitgroup": r["hitgroup_name"] or r["hitgroup"],
                 "trade": bool(r["is_trade"]),
                 "traded": bool(r["victim_traded"]),
-                **_duel(m, r, start, frames),
+                **_duel(m, r, start, frames, reactions),
             }
             for r in _in(m.data["kills"], "tick", start, end).sort("tick").iter_rows(named=True)
         ],
@@ -323,11 +341,14 @@ def _inventories(m: Match, start: int, end: int, steamids: pl.Series) -> dict[in
     return out
 
 
-def _duel(m: Match, kill: dict, start: int, frames: pl.DataFrame) -> dict:
-    """Damage both ways between killer and victim this round, distance, killer HP and the victim's weapon."""
+def _duel(m: Match, kill: dict, start: int, frames: pl.DataFrame, reactions: dict) -> dict:
+    """Damage both ways between killer and victim this round, distance, killer HP, the victim's weapon and each one's reaction time (None if unknown)."""
     a, v, tick = kill["attacker_steamid"], kill["victim_steamid"], kill["tick"]
     dmg = m.data["damages"].filter(pl.col("tick").is_between(start, tick)) if "damages" in m.data else None
-    out: dict = {"dist": None, "attacker_hp": None, "victim_weapon": None, "given": [0, 0], "taken": [0, 0], "duel_start": None}
+    out: dict = {
+        "dist": None, "attacker_hp": None, "victim_weapon": None, "given": [0, 0], "taken": [0, 0], "duel_start": None,
+        "reaction": reactions.get((str(a), str(v))), "victim_reaction": reactions.get((str(v), str(a))),
+    }
     if None not in (kill["attacker_x"], kill["victim_x"]):
         out["dist"] = round(((kill["attacker_x"] - kill["victim_x"]) ** 2 + (kill["attacker_y"] - kill["victim_y"]) ** 2
                              + (kill["attacker_z"] - kill["victim_z"]) ** 2) ** 0.5)
