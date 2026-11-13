@@ -201,3 +201,21 @@ def test_player_stats_route(out):
     status, stats = call(app, "GET", "/api/matches/dust2_mini/player-stats")
     assert status == 200 and len(stats) == 10 and all({"weapons", "accuracy", "flashes"} <= set(p) for p in stats.values())
     assert call(app, "GET", "/api/matches/nope/player-stats")[0] == 404
+
+
+def test_player_stats_pick_up_a_newly_cached_mesh(out, monkeypatch, tmp_path):
+    from freezetime.app import server
+
+    built = []
+    monkeypatch.setattr(server, "player_stats", lambda d: built.append(d) or {"n": len(built)})
+    monkeypatch.setattr(server, "mesh_path", lambda map_name: None)
+    server._player_stats.cache_clear()
+    app = create_app(out)
+    assert call(app, "GET", "/api/matches/dust2_mini/player-stats")[1] == {"n": 1}
+    assert call(app, "GET", "/api/matches/dust2_mini/player-stats")[1] == {"n": 1}  # cached
+    mesh = tmp_path / "de_dust2.mesh"
+    mesh.write_bytes(b"")
+    monkeypatch.setattr(server, "mesh_path", lambda map_name: mesh if map_name == "de_dust2" else None)
+    assert call(app, "GET", "/api/matches/dust2_mini/player-stats")[1] == {"n": 2}  # the mesh appeared: rebuilt without a restart
+    assert call(app, "GET", "/api/matches/dust2_mini/player-stats")[1] == {"n": 2}
+    server._player_stats.cache_clear()

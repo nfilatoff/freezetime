@@ -19,7 +19,7 @@ export function KillCard({ r, kill, x, y, maxX }: { r: Replay; kill: ReplayKill;
   return (
     <div className="kill-card" style={{ left, top: Math.max(4, y - 20) }}>
       <div className="kc-head">
-        <span style={{ color: sideColor(kill.attacker_side) }}>{kill.attacker_name ?? "World"}</span>
+        <span style={{ color: sideColor(kill.attacker_side) }}>{kill.attacker_name ?? t("replay.world")}</span>
         <span className="kc-weapon"><EquipmentIcon item={kill.weapon} size={14} maxWidth={40} title={weaponName(kill.weapon)} fallback={weaponName(kill.weapon)} /></span>
         <span style={{ color: sideColor(kill.victim_side) }}>{kill.victim_name}</span>
       </div>

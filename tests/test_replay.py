@@ -103,6 +103,30 @@ def test_inventory_shots_and_duels(dust2_mini):
         if k["attacker"] and k["weapon"] not in ("hegrenade", "inferno", "molotov"):
             assert k["given"][0] >= 1 and k["given"][1] > 0
 
+    # duel damage is health actually taken: no more than a full health bar, and it matches the round's hurts
+    h = doc["hurts"]
+    for k in doc["kills"]:
+        if not k["attacker"] or k["attacker"] == k["victim"]:
+            continue
+        for (hits, dmg), a, v in ((k["given"], k["attacker"], k["victim"]), (k["taken"], k["victim"], k["attacker"])):
+            pair = [d for t, x, y, d in zip(h["tick"], h["attacker"], h["victim"], h["dmg"]) if x == a and y == v and t <= k["tick"]]
+            assert 0 <= dmg <= 100 and (hits, dmg) == (len(pair), sum(pair))
+
+
+def test_duel_damage_has_no_overkill(dust2_mini):
+    m = load_match(dust2_mini, extra_tables=("smokes", "fires", "grenades", "blinds", "shots", "damages"))
+    overkill = False
+    for r in m.rounds["round_num"].to_list():
+        doc = build_round(m, r)
+        for k in doc["kills"]:
+            assert k["given"][1] <= 100 and k["taken"][1] <= 100  # never more than a full health bar per victim and round
+            if k["attacker"] and k["attacker"] != k["victim"]:
+                raw = m.data["damages"].filter(pl.col("tick").is_between(doc["start_tick"], k["tick"])
+                                               & (pl.col("attacker_steamid") == int(k["attacker"])) & (pl.col("victim_steamid") == int(k["victim"])))
+                overkill |= raw["dmg_health"].sum() > 100
+    assert overkill  # the fixture has duels whose raw dmg_health sums past 100
+
+
 
 def test_grenades_carry_the_release(dust2_mini):
     m = load_match(dust2_mini, extra_tables=("smokes", "fires", "grenades", "blinds", "shots", "damages"))

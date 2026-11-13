@@ -320,7 +320,8 @@ export function drawPlayer(ctx: Ctx, st: PlayerState, px: number, py: number, s:
   if (style.weapon) {
     let y = by + 13 * s;
     if (st.weapon) {
-      if (!drawEquipmentIcon(ctx, st.weapon, px, y - 3 * s, 10 * s, 32 * s, "#e8edf2", "#000")) {
+      // capped at 22 px wide: every pistol keeps its size, long guns shrink so they don't cover neighbours
+      if (!drawEquipmentIcon(ctx, st.weapon, px, y - 3 * s, 10 * s, 22 * s, "#e8edf2", "#000")) {
         outlinedText(ctx, weaponName(st.weapon), px, y, s, 9, "#e8edf2", true);
       }
       y += 5 * s;

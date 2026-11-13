@@ -27,7 +27,7 @@ from freezetime.context import Match, load_match
 from freezetime.lineups import MATCH_DIST, MATCH_TICKS, WEAPON_TYPE
 from freezetime.visibility import checker, reaction_times, round_visibility
 
-FORMAT = 10  # bump when the document changes; old cache files are then ignored
+FORMAT = 11  # bump when the document changes; old cache files are then ignored
 PRE_FREEZE_SEC = 20.0  # replay starts at most this long before freeze end
 POST_END_SEC = 4.0  # and runs this long after the round end (capped by the official end)
 GRENADE_STEP = 2  # keep every n-th tick of grenade trajectories
@@ -156,8 +156,9 @@ def build_round(m: Match, round_num: int) -> dict:
     seen_by = round_visibility(frames, smokes, chk, rate, [int(p["steamid"]) for p in players]) if chk else {}
     for p in players:
         p["seen_by"] = seen_by.get(int(p["steamid"]))
+    damages = actual_damage(_in(m.data["damages"], "tick", start, end)) if "damages" in m.data else None
     reactions = {}
-    if chk and "damages" in m.data:
+    if chk and damages is not None:
         shots = _in(m.data["shots"], "tick", start, end)
         reactions = {(r["attacker"], r["victim"]): r["reaction"] for r in reaction_times(frames, smokes, _in(m.data["damages"], "tick", start, end), shots, chk, rate)}
 
@@ -217,7 +218,7 @@ def build_round(m: Match, round_num: int) -> dict:
                 "hitgroup": r["hitgroup_name"] or r["hitgroup"],
                 "trade": bool(r["is_trade"]),
                 "traded": bool(r["victim_traded"]),
-                **_duel(m, r, start, frames, reactions),
+                **_duel(r, damages, frames, reactions),
             }
             for r in _in(m.data["kills"], "tick", start, end).sort("tick").iter_rows(named=True)
         ],
@@ -227,7 +228,7 @@ def build_round(m: Match, round_num: int) -> dict:
             for r in _in(m.data["bomb"], "tick", start, end).sort("tick").iter_rows(named=True)
         ],
         "shots": _shots(m, start, end),
-        "hurts": _hurts(m, start, end),
+        "hurts": _hurts(damages),
     }
 
 
@@ -357,10 +358,22 @@ def _inventories(m: Match, start: int, end: int, steamids: pl.Series) -> dict[in
     return out
 
 
-def _duel(m: Match, kill: dict, start: int, frames: pl.DataFrame, reactions: dict) -> dict:
-    """Damage both ways between killer and victim this round, distance, killer HP, the victim's weapon and each one's reaction time (None if unknown)."""
+def actual_damage(d: pl.DataFrame, by: tuple[str, ...] = ()) -> pl.DataFrame:
+    """Damage rows sorted by tick with ``dmg``: the health actually taken, no overkill (``dmg_health`` capped by the victim's HP before the hit, 0 for armour-only hits).
+
+    awpy's health_pre of a lethal hit is health_post + dmg, so the HP before a hit is the victim's previous health_post
+    (100 at first) among all damage rows of ``d``; ``by`` are extra columns that reset the HP, e.g. ``("round_num",)``
+    when ``d`` spans several rounds (otherwise ``d`` must be one round).
+    """
+    d = d.filter(pl.col("dmg_health").is_not_null()).sort(["tick", "health_post"], descending=[False, True], maintain_order=True)
+    before = pl.col("health_post").shift(1).over([*by, "victim_steamid"]).fill_null(100)
+    return d.with_columns(dmg=pl.min_horizontal("dmg_health", before).clip(lower_bound=0).cast(pl.Int64))
+
+
+def _duel(kill: dict, damages: pl.DataFrame | None, frames: pl.DataFrame, reactions: dict) -> dict:
+    """Damage both ways (hits, health taken) between killer and victim this round, distance, killer HP, the victim's weapon and each one's reaction time (None if unknown)."""
     a, v, tick = kill["attacker_steamid"], kill["victim_steamid"], kill["tick"]
-    dmg = m.data["damages"].filter(pl.col("tick").is_between(start, tick)) if "damages" in m.data else None
+    dmg = damages.filter(pl.col("tick") <= tick) if damages is not None else None
     out: dict = {
         "dist": None, "attacker_hp": None, "victim_weapon": None, "given": [0, 0], "taken": [0, 0], "duel_start": None,
         "reaction": reactions.get((str(a), str(v))), "victim_reaction": reactions.get((str(v), str(a))),
@@ -369,10 +382,10 @@ def _duel(m: Match, kill: dict, start: int, frames: pl.DataFrame, reactions: dic
         out["dist"] = round(((kill["attacker_x"] - kill["victim_x"]) ** 2 + (kill["attacker_y"] - kill["victim_y"]) ** 2
                              + (kill["attacker_z"] - kill["victim_z"]) ** 2) ** 0.5)
     if a and a != v and dmg is not None:
-        given = dmg.filter((pl.col("attacker_steamid") == a) & (pl.col("victim_steamid") == v))
-        taken = dmg.filter((pl.col("attacker_steamid") == v) & (pl.col("victim_steamid") == a))
-        out["given"] = [given.height, int(given["dmg_health"].sum())]
-        out["taken"] = [taken.height, int(taken["dmg_health"].sum())]
+        given = dmg.filter((pl.col("attacker_steamid") == a) & (pl.col("victim_steamid") == v) & (pl.col("dmg") > 0))
+        taken = dmg.filter((pl.col("attacker_steamid") == v) & (pl.col("victim_steamid") == a) & (pl.col("dmg") > 0))
+        out["given"] = [given.height, int(given["dmg"].sum())]
+        out["taken"] = [taken.height, int(taken["dmg"].sum())]
         both = pl.concat([given["tick"], taken["tick"]])
         out["duel_start"] = int(both.min()) if both.len() else None
         hurt = dmg.filter(pl.col("victim_steamid") == a)
@@ -383,15 +396,12 @@ def _duel(m: Match, kill: dict, start: int, frames: pl.DataFrame, reactions: dic
     return out
 
 
-def _hurts(m: Match, start: int, end: int) -> dict:
-    """Every damage hit of the round: attacker (None for the world), victim, health taken (no overkill from the victim's previous HP, armour-only hits skipped) and weapon."""
-    d = _in(m.data["damages"], "tick", start, end).filter(pl.col("dmg_health").is_not_null()).sort(["tick", "health_post"], descending=[False, True], maintain_order=True) if "damages" in m.data else None
+def _hurts(damages: pl.DataFrame | None) -> dict:
+    """Every damage hit of the round (``actual_damage`` rows): attacker (None for the world), victim, health taken (armour-only hits skipped) and weapon."""
     out: dict = {"tick": [], "attacker": [], "victim": [], "dmg": [], "weapon": []}
-    if d is None:
+    if damages is None:
         return out
-    # awpy's health_pre of a lethal hit is health_post + dmg, so the HP before a hit is the victim's previous health_post (100 at first)
-    before = pl.col("health_post").shift(1).over("victim_steamid").fill_null(100)
-    d = d.with_columns(dmg=pl.min_horizontal("dmg_health", before).clip(lower_bound=0), weapon=pl.col("weapon").str.replace("^weapon_", "")).filter(pl.col("dmg") > 0)
+    d = damages.filter(pl.col("dmg") > 0).with_columns(weapon=pl.col("weapon").str.replace("^weapon_", ""))
     out["tick"] = d["tick"].to_list()
     out["attacker"] = [str(a) if a else None for a in d["attacker_steamid"].to_list()]
     out["victim"] = [str(v) for v in d["victim_steamid"].to_list()]

@@ -921,7 +921,7 @@ function KillFeed({ r, tick }: { r: Replay; tick: number }) {
       {recent.map((k, i) => (
         <div key={i} className="kill">
           {attackerBlind(r, k) && <FeedIcon id="blind" color="#ddd" size={14} title={t("feed.blind")} />}
-          <span style={{ color: sideColor(k.attacker_side) }}>{k.attacker_name ?? "World"}</span>
+          <span style={{ color: sideColor(k.attacker_side) }}>{k.attacker_name ?? t("replay.world")}</span>
           {k.assister_name && (
             <>
               <span className="muted">+</span>
@@ -972,7 +972,7 @@ function Timeline({ r, tick, onSeek, notes }: { r: Replay; tick: number; onSeek:
           key={i}
           className="tl-kill"
           style={{ left: pct(k.tick), background: sideColor(k.attacker_side) }}
-          title={`${k.attacker_name ?? "World"} → ${k.victim_name} (${weaponName(k.weapon)})`}
+          title={t("tl.kill", { attacker: k.attacker_name ?? t("replay.world"), victim: k.victim_name, weapon: weaponName(k.weapon) })}
         />
       ))}
       {r.grenades.filter((g) => g.type !== "decoy").map((g, i) => (

@@ -46,6 +46,7 @@ from freezetime.lineups import MAP_RE, PRACTICE, cfg_name, lineup_cfg, lineup_co
 from freezetime.maps import ZoneError, available_maps, load_map_config, save_zones
 from freezetime.player_stats import player_stats
 from freezetime.replay import PLAYER_STATE_COLUMNS, round_payload
+from freezetime.visibility import mesh_path
 from freezetime.scout import MatchData, dossier, match_data, playbook as discovered_playbook, roster_suggestions, select_rounds, similar_rounds, strategy_stats
 from freezetime.tactics import tactics, userid_map, utility_events
 from freezetime.team_stats import team_stats
@@ -215,8 +216,15 @@ def _overview(d: Path, _stamp: float) -> dict:
     }
 
 
+def _mesh_stamp(d: Path) -> tuple[str, float] | None:
+    """The match map's cached visibility mesh (path, mtime) or None: a mesh cached later adds reaction times, so it is part of the cache key."""
+    manifest = json.loads((d / "manifest.json").read_text(encoding="utf-8"))
+    path = mesh_path(str(manifest["header"].get("map_name", "")))
+    return (str(path), path.stat().st_mtime) if path else None
+
+
 @lru_cache(maxsize=16)
-def _player_stats(d: Path, _stamp: float) -> dict:
+def _player_stats(d: Path, _stamp: float, _mesh: tuple[str, float] | None) -> dict:
     return player_stats(d)
 
 
@@ -717,7 +725,7 @@ def create_app(out: str | Path = "out") -> FastAPI:
     def match_player_stats(match_id: str) -> dict:
         """Per player: kills by weapon, accuracy (shots and hits) and flashes (freezetime/player_stats.py)."""
         d = lib.match_dir(match_id)
-        return _player_stats(d, _stamp(d))
+        return _player_stats(d, _stamp(d), _mesh_stamp(d))
 
     @api.get("/api/matches/{match_id}/tactics")
     def match_tactics(match_id: str) -> dict:

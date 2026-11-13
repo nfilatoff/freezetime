@@ -445,6 +445,8 @@ export const en = {
   "tl.defuse": "defuse",
   "tl.plant": "plant {site}",
   "tl.nade": "{who}: {nade}",
+  "tl.kill": "{attacker} → {victim} ({weapon})",
+  "replay.world": "World",
   "level.lower": "lower",
   "level.upper": "upper",
   "radar.missing": "radar not found in ~/.awpy",

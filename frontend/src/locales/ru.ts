@@ -442,6 +442,8 @@ export const ru: Record<Key, Entry> = {
   "tl.defuse": "дефьюз",
   "tl.plant": "плант {site}",
   "tl.nade": "{who}: {nade}",
+  "tl.kill": "{attacker} → {victim} ({weapon})",
+  "replay.world": "Мир",
   "level.lower": "нижний",
   "level.upper": "верхний",
   "radar.missing": "радар не найден в ~/.awpy",

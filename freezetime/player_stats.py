@@ -5,7 +5,8 @@ Only the match's real rounds count (warmup and knife rounds are dropped by ``wit
 Hits are tied to shots by time, not by weapon name: ``player_hurt`` names some guns differently from
 ``weapon_fire`` (an M4A1-S hit says ``m4a1``, like the M4A4; a USP-S hit says ``hkp2000``), so every
 bullet hit is matched to the attacker's last shot at or before it (``HIT_WINDOW`` ticks). A shot that hit
-anyone counts once, so shotgun pellets don't inflate accuracy.
+anyone counts once, so shotgun pellets don't inflate accuracy. Damage is the health actually taken
+(``replay.actual_damage``: no overkill); an armour-only hit still counts as a hit.
 
 ``reaction`` is the approximate time from an enemy coming into the player's view to their first shot at them
 (``freezetime.visibility``); None when the map's mesh is not cached.
@@ -19,7 +20,7 @@ from statistics import mean, median
 import polars as pl
 
 from freezetime.context import load_match, pct, with_round
-from freezetime.replay import round_frames
+from freezetime.replay import actual_damage, round_frames
 from freezetime.visibility import checker, reaction_times
 
 HIT_WINDOW = 8  # ticks between a shot and its damage event
@@ -66,10 +67,11 @@ def player_stats(directory: str | Path) -> dict[str, dict]:
     shots = with_round(m.data["shots"], m.rounds).select(
         "tick", sid("steamid").alias("steamid"), _weapon("weapon")
     ).filter(_gun()).sort("tick")
-    hurt = with_round(m.data["damages"], m.rounds).filter(sid("attacker_steamid").is_not_null()).select(
+    # damage as actually taken (no overkill) is worked out over every hit of the round, the world's included
+    hurt = actual_damage(with_round(m.data["damages"], m.rounds), ("round_num",)).filter(sid("attacker_steamid").is_not_null()).select(
         "tick", sid("attacker_steamid").alias("steamid"), sid("victim_steamid").alias("victim"),
         pl.col("weapon").cast(pl.Utf8).alias("hurt_weapon"), pl.col("hitgroup_name").cast(pl.Utf8).alias("hitgroup"),
-        pl.col("dmg_health").cast(pl.Int64).alias("damage"),
+        pl.col("dmg").alias("damage"),
         (pl.col("attacker_side") != pl.col("victim_side")).alias("enemy"),
     ).filter(_gun("hurt_weapon")).sort("tick")
     # the shot each bullet hit came from: the attacker's last shot within HIT_WINDOW ticks

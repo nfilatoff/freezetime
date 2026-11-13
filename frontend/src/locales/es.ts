@@ -442,6 +442,8 @@ export const es: Record<Key, Entry> = {
   "tl.defuse": "desactivación",
   "tl.plant": "plant {site}",
   "tl.nade": "{who}: {nade}",
+  "tl.kill": "{attacker} → {victim} ({weapon})",
+  "replay.world": "Mundo",
   "level.lower": "inferior",
   "level.upper": "superior",
   "radar.missing": "radar no encontrado en ~/.awpy",
