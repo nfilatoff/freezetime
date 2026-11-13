@@ -100,3 +100,20 @@ def test_money_follows_purchases(dust2_mini, tmp_path):
         assert len(p["money"]) == len(ticks)
         assert p["money"][0] == 4000 and p["money"][-1] == 800  # the balance at each frame, not the round start
         assert p["money"][ticks.index(gap)] == 800  # a gap keeps the previous value
+
+
+def test_hurts(dust2_mini):
+    m = load_match(dust2_mini, extra_tables=("smokes", "fires", "grenades", "blinds", "shots", "damages"))
+    doc = build_round(m, 5)
+    h = doc["hurts"]
+    assert len({len(v) for v in h.values()}) == 1 and h["tick"]
+    assert h["tick"] == sorted(h["tick"])
+    assert all(doc["start_tick"] <= t <= doc["last_tick"] for t in h["tick"])
+    assert all(1 <= d <= 100 for d in h["dmg"])
+    for v in set(h["victim"]):  # a player has 100 HP a round, so no more than that is ever taken
+        assert sum(d for x, d in zip(h["victim"], h["dmg"]) if x == v) <= 100
+    # a kill comes after enough damage: what the victim took up to the kill is about a full health bar
+    kill = next(k for k in doc["kills"] if k["victim"] in h["victim"])
+    taken = sum(d for t, v, d in zip(h["tick"], h["victim"], h["dmg"]) if v == kill["victim"] and t <= kill["tick"])
+    assert taken >= 90
+    json.dumps(doc)

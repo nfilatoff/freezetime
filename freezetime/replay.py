@@ -3,8 +3,8 @@
 One round becomes a JSON document with a shared tick grid and per-player arrays
 (``x``, ``y``, ``z``, ``yaw``, ``hp``, ``money``, ...), inventory changes, grenade trajectories (with the
 thrower's position and view angles at the release, for ``setpos``), smokes
-and fires with their real lifetimes and the thrower's side, blinds, kills with duel details, bomb events and shots
-with their direction and hit point. Documents are cached gzipped in
+and fires with their real lifetimes and the thrower's side, blinds, kills with duel details, bomb events, shots
+with their direction and hit point and damage hits (``hurts``: tick, attacker, victim, health taken, weapon). Documents are cached gzipped in
 ``<extract>/replay/round_<n>.v<FORMAT>.json.gz``.
 
 Frames come from ``replay.parquet`` (every few ticks, written by ``extract``); older
@@ -23,7 +23,7 @@ import polars as pl
 from freezetime.context import Match, load_match
 from freezetime.lineups import MATCH_DIST, MATCH_TICKS, WEAPON_TYPE
 
-FORMAT = 7  # bump when the document changes; old cache files are then ignored
+FORMAT = 8  # bump when the document changes; old cache files are then ignored
 PRE_FREEZE_SEC = 20.0  # replay starts at most this long before freeze end
 POST_END_SEC = 4.0  # and runs this long after the round end (capped by the official end)
 GRENADE_STEP = 2  # keep every n-th tick of grenade trajectories
@@ -193,6 +193,7 @@ def build_round(m: Match, round_num: int) -> dict:
             for r in _in(m.data["bomb"], "tick", start, end).sort("tick").iter_rows(named=True)
         ],
         "shots": _shots(m, start, end),
+        "hurts": _hurts(m, start, end),
     }
 
 
@@ -342,6 +343,23 @@ def _duel(m: Match, kill: dict, start: int, frames: pl.DataFrame) -> dict:
     last = frames.filter((pl.col("steamid") == v) & (pl.col("tick") <= tick) & (pl.col("health") > 0)).sort("tick").tail(1)
     if last.height:
         out["victim_weapon"] = last["active_weapon"][0]
+    return out
+
+
+def _hurts(m: Match, start: int, end: int) -> dict:
+    """Every damage hit of the round: attacker (None for the world), victim, health taken (no overkill from the victim's previous HP, armour-only hits skipped) and weapon."""
+    d = _in(m.data["damages"], "tick", start, end).filter(pl.col("dmg_health").is_not_null()).sort(["tick", "health_post"], descending=[False, True], maintain_order=True) if "damages" in m.data else None
+    out: dict = {"tick": [], "attacker": [], "victim": [], "dmg": [], "weapon": []}
+    if d is None:
+        return out
+    # awpy's health_pre of a lethal hit is health_post + dmg, so the HP before a hit is the victim's previous health_post (100 at first)
+    before = pl.col("health_post").shift(1).over("victim_steamid").fill_null(100)
+    d = d.with_columns(dmg=pl.min_horizontal("dmg_health", before).clip(lower_bound=0), weapon=pl.col("weapon").str.replace("^weapon_", "")).filter(pl.col("dmg") > 0)
+    out["tick"] = d["tick"].to_list()
+    out["attacker"] = [str(a) if a else None for a in d["attacker_steamid"].to_list()]
+    out["victim"] = [str(v) for v in d["victim_steamid"].to_list()]
+    out["dmg"] = [int(v) for v in d["dmg"].to_list()]
+    out["weapon"] = d["weapon"].to_list()
     return out
 
 

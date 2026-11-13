@@ -551,6 +551,8 @@ export interface Replay {
   bomb: ReplayBombEvent[];
   // gun shots: shooter position and view yaw; hx/hy is the victim's position when the shot hit
   shots: { tick: number[]; player: string[]; x: number[]; y: number[]; yaw: number[]; hx: (number | null)[]; hy: (number | null)[] };
+  // damage hits, sorted by tick: attacker is null for the world, dmg is the health taken (no overkill)
+  hurts: { tick: number[]; attacker: (string | null)[]; victim: string[]; dmg: number[]; weapon: string[] };
 }
 
 // ---- tactics boards (freezetime/board.py); coordinates are radar px of level `l` ----

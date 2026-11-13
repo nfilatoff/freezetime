@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, type BoardMark, type BoardPos, type MatchOverview, type Note, type Replay } from "../api";
+import { api, type BoardMark, type BoardPos, type MatchOverview, type Note, type Replay, type TimelineRound } from "../api";
 import { go } from "../router";
 import { PEN_COLORS, PEN_WIDTHS, boardFromFrame, drawMarks, emptyBoard, hitTest, newId, startMark, stashDraft, strayMark, stretchMark } from "../board";
 import { useFitHeight } from "../fit";
 import { CT_COLOR, RADAR_SIZE, T_COLOR, levelLabel, levelOf, panelLevels, sideColor, sideShort, useMapAssets, worldToPx } from "../radar";
 import {
-  BOMB_TIME, NADE_COLORS, NO_VIEW, ROUND_TIME, bombState, drawRound, fmtClock, frameAt, killAt, loadReplay, panBy, playerStates, throwAt, toRadar, weaponName, zoomAt,
+  BOMB_TIME, NADE_COLORS, NO_VIEW, ROUND_TIME, bombState, drawRound, fmtClock, fmtMoney, frameAt, killAt, loadReplay, panBy, playerStates, throwAt, toRadar, weaponName, zoomAt,
   type PlayerState, type View,
 } from "../replayDraw";
 import { useCalloutMode } from "../callouts";
 import { reasonLabel, t, td, type Key } from "../i18n";
+import { buyLabel } from "../clipSummary";
 import { CalloutToggle } from "./CalloutToggle";
 import { ToolIcon } from "./Icons";
 import { KillCard } from "./KillCard";
@@ -52,7 +53,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [view, setView] = useState<number | "all">("all");
-  const [opts, setOpts] = useState({ names: true, weapons: false, trails: true, shots: true, flashMarks: true });
+  const [opts, setOpts] = useState({ names: true, weapons: false, trails: true, shots: true, flashMarks: true, damage: true });
   const [zoom, setZoom] = useState<View>(NO_VIEW); // the same for every round of the match
   const [zoomLocked, setZoomLocked] = useState(false);
   const pan = useRef<{ x: number; y: number; from: View; moved: boolean } | null>(null);
@@ -451,6 +452,28 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
   }, [data, seek, stepFrame, jumpKill, roundIdx, assets, drawing, undoMark, clearMarks, onPrev, onNext]);
 
   const states = useMemo(() => (data ? playerStates(data, uiTick) : []), [data, uiTick]);
+  // per player up to now: damage dealt to enemies and kills (team damage and team kills excluded)
+  const tally = useMemo(() => {
+    const out = new Map<string, { dmg: number; kills: number }>();
+    if (!data) return out;
+    const side = new Map(data.players.map((p) => [p.steamid, p.side]));
+    const row = (id: string) => out.get(id) ?? out.set(id, { dmg: 0, kills: 0 }).get(id)!;
+    const h = data.hurts;
+    for (let i = 0; i < h.tick.length && h.tick[i] <= uiTick; i++) {
+      const a = h.attacker[i];
+      if (a && a !== h.victim[i] && side.get(a) !== side.get(h.victim[i])) row(a).dmg += h.dmg[i];
+    }
+    for (const k of data.kills) {
+      if (k.tick <= uiTick && k.attacker && k.attacker !== k.victim && k.attacker_side !== k.victim_side) row(k.attacker).kills++;
+    }
+    return out;
+  }, [data, uiTick]);
+  // rounds won before this one, per team name
+  const scores = useMemo(() => {
+    const won: Record<string, number> = {};
+    for (const r of match.timeline) if (r.round < round && r.winner) won[r.winner] = (won[r.winner] ?? 0) + 1;
+    return won;
+  }, [match, round]);
   const copyPlayer = (s: PlayerState) => copy(setpos(s.x, s.y, s.z, 0, s.yaw ?? 0));
   const thrower = hoverThrow && data ? data.players.find((p) => p.steamid === data.grenades[hoverThrow.g]?.thrower)?.name : undefined;
   if (error) return <div className="error">{error}</div>;
@@ -459,6 +482,10 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
   const dpr = window.devicePixelRatio || 1;
   const width = size * levels.length;
   const roundInfo = match.timeline[roundIdx];
+  // `data` still holds the previous round for a moment after a round change
+  const live = data && data.round === round ? data : null;
+  const ct = sideSummary(live ? states : null, "counter-terrorist", live, roundInfo, scores);
+  const tr = sideSummary(live ? states : null, "terrorist", live, roundInfo, scores);
 
   return (
     <div className="replay">
@@ -467,6 +494,11 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
         {!onNext && <RoundStrip match={match} round={round} />}
         <button disabled={!onNext && roundIdx >= rounds.length - 1} onClick={nextRound} title={onNext ? t("pl.next") : undefined}>] ▶</button>
         {data && <Clock r={data} tick={uiTick} />}
+        {live && (
+          <span className="vs-alive" title={t("replay.aliveVsTitle")}>
+            <b style={{ color: CT_COLOR }}>{ct.alive}</b> {t("replay.vs")} <b style={{ color: T_COLOR }}>{tr.alive}</b>
+          </span>
+        )}
         {loadMs !== null && <span className="muted small">{t("replay.loaded", { ms: loadMs })}{data?.low_res ? t("replay.lowRes") : ""}</span>}
         <span className="grow" />
         {assets && assets.meta.levels.length > 1 && (
@@ -482,6 +514,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
         <label className="small"><input type="checkbox" checked={opts.trails} onChange={(e) => setOpts({ ...opts, trails: e.target.checked })} /> {t("replay.trails")}</label>
         <label className="small"><input type="checkbox" checked={opts.shots} onChange={(e) => setOpts({ ...opts, shots: e.target.checked })} /> {t("replay.shots")}</label>
         <label className="small" title={t("replay.flashMarksTitle")}><input type="checkbox" checked={opts.flashMarks} onChange={(e) => setOpts({ ...opts, flashMarks: e.target.checked })} /> {t("replay.flashMarks")}</label>
+        <label className="small" title={t("replay.damageNumsTitle")}><input type="checkbox" checked={opts.damage} onChange={(e) => setOpts({ ...opts, damage: e.target.checked })} /> {t("replay.damageNums")}</label>
         <CalloutToggle meta={assets?.meta} />
         <span className="seg zoom-ctl">
           <button className={zoomLocked ? "on" : ""} title={t("replay.zoomLockTitle")} onClick={() => setZoomLocked((v) => !v)}>
@@ -494,7 +527,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
       </div>
 
       <div className="replay-body">
-        <TeamPanel states={states.filter((s) => s.p.side === "counter-terrorist")} title={data?.teams["counter-terrorist"] ?? "CT"} color={CT_COLOR} onCopy={copyPlayer} height={size} />
+        <TeamPanel states={states.filter((s) => s.p.side === "counter-terrorist")} head={ct} title={ct.name ?? "CT"} color={CT_COLOR} onCopy={copyPlayer} tally={tally} height={size} />
         <div className="replay-stage" ref={boxRef}>
           {!data || !assets ? (
             <div className="muted" style={{ height: size }}>{t("replay.loadingRound")}</div>
@@ -531,7 +564,7 @@ export function ReplayView({ match, round, at, until, onEnd, autoplay, onPrev, o
             </div>
           )}
         </div>
-        <TeamPanel states={states.filter((s) => s.p.side === "terrorist")} title={data?.teams.terrorist ?? "T"} color={T_COLOR} onCopy={copyPlayer} height={size} />
+        <TeamPanel states={states.filter((s) => s.p.side === "terrorist")} head={tr} title={tr.name ?? "T"} color={T_COLOR} onCopy={copyPlayer} tally={tally} height={size} />
       </div>
 
       {data && (
@@ -672,11 +705,52 @@ function Clock({ r, tick }: { r: Replay; tick: number }) {
   return <span className="clock">{fmtClock(ROUND_TIME - (tick - r.freeze_end_tick) / r.tick_rate)}</span>;
 }
 
-function TeamPanel({ states, title, color, onCopy, height }: { states: PlayerState[]; title: string; color: string; onCopy: (s: PlayerState) => void; height: number }) {
+interface SideSummary { name: string | null; score: number; live: boolean; alive: number; total: number; money: number | null; buy: string | null; equip: number | null }
+
+/** One side's header numbers: score before the round, players alive, money now (live frames only), buy and equipment at the round start. */
+function sideSummary(states: PlayerState[] | null, side: string, data: Replay | null, info: TimelineRound | undefined, scores: Record<string, number>): SideSummary {
+  const mine = (states ?? []).filter((s) => s.p.side === side);
+  const moneys = mine.map((s) => s.money).filter((m): m is number => m !== null);
+  // the timeline names are the keys of `scores`, so take the team from there first
+  const entry = info ? Object.entries(info.teams).find(([, x]) => x.side === side) : undefined;
+  const name = entry?.[0] ?? data?.teams[side as keyof Replay["teams"]] ?? null;
+  return {
+    name,
+    score: name ? scores[name] ?? 0 : 0,
+    live: states !== null,
+    alive: mine.filter((s) => s.hp > 0).length,
+    total: mine.length,
+    money: moneys.length ? moneys.reduce((x, y) => x + y, 0) : null,
+    buy: entry?.[1].buy ?? null,
+    equip: entry?.[1].equip ?? null,
+  };
+}
+
+/** Damage to enemies and kills so far: "87 ☠☠", or "☠×4" past three kills. */
+function PlayerTally({ dmg, kills }: { dmg: number; kills: number }) {
+  return (
+    <span className="pl-tally">
+      {dmg > 0 && <span title={t("pl.dealtTitle", { n: dmg })}>{dmg}</span>}
+      {kills > 0 && <span title={t("pl.killsTitle", { n: kills })}>{kills > 3 ? `☠×${kills}` : "☠".repeat(kills)}</span>}
+    </span>
+  );
+}
+
+function TeamPanel({ states, head, title, color, onCopy, tally, height }: { states: PlayerState[]; head: SideSummary; title: string; color: string; onCopy: (s: PlayerState) => void; tally: Map<string, { dmg: number; kills: number }>; height: number }) {
   // as tall as the radar at most, so the players never push the timeline and controls off the screen
   return (
     <div className="team-panel" style={{ maxHeight: height }}>
-      <div className="team-title" style={{ color }}>{title}</div>
+      <div className="team-title" style={{ color }}>
+        <b className="team-score">{head.score}</b>
+        <span className="team-name">{title}</span>
+      </div>
+      <div className="team-info muted small">
+        {head.live && <span title={t("replay.aliveTitle")}>{head.alive}/{head.total}</span>}
+        {head.money !== null && <span title={t("replay.teamMoneyTitle")}>{fmtMoney(head.money)}</span>}
+        {(head.buy || head.equip !== null) && (
+          <span title={t("replay.teamEquipTitle")}>{[head.buy ? buyLabel(head.buy) : null, head.equip !== null ? fmtMoney(head.equip) : null].filter(Boolean).join(" ")}</span>
+        )}
+      </div>
       {states.map((s) => (
         <div
           key={s.p.steamid}
@@ -694,11 +768,12 @@ function TeamPanel({ states, title, color, onCopy, height }: { states: PlayerSta
           </div>
           <div className="hp"><div style={{ width: `${s.hp}%`, background: color }} /><span>{s.hp}</span></div>
           <div className="pl-weapon">
-            {[
+            <span>{[
               // the active gun is highlighted in the inventory line below; other active items are named here
               s.hp <= 0 ? "DEAD" : s.p.inv && (s.weapon === s.primary || s.weapon === s.secondary) ? null : weaponName(s.weapon),
               s.money !== null ? `$${s.money}` : null,
-            ].filter(Boolean).join(" · ")}
+            ].filter(Boolean).join(" · ")}</span>
+            <PlayerTally {...(tally.get(s.p.steamid) ?? { dmg: 0, kills: 0 })} />
           </div>
           {s.hp > 0 && (s.primary || s.secondary || s.nades.length > 0) && (
             <div className="pl-inv">

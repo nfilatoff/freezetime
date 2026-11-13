@@ -177,6 +177,7 @@ export interface PlayerStyle {
   cone: boolean;
   shooting: boolean;
   bombOutline?: boolean;
+  hurt?: boolean; // just took damage: red name and outline
 }
 
 const RAD = 6.5; // player icon radius, screen px
@@ -233,8 +234,8 @@ export function drawPlayer(ctx: Ctx, st: PlayerState, px: number, py: number, s:
   }
   const bomb = st.bomb && style.bombOutline !== false;
   ctx.fillStyle = style.color;
-  ctx.strokeStyle = bomb ? "#ff3030" : "#000";
-  ctx.lineWidth = (bomb ? 2.5 : 1.2) * s;
+  ctx.strokeStyle = bomb || style.hurt ? "#ff3030" : "#000";
+  ctx.lineWidth = (bomb || style.hurt ? 2.5 : 1.2) * s;
   ctx.beginPath();
   ctx.arc(px, py, rad, 0, Math.PI * 2);
   ctx.fill();
@@ -252,7 +253,7 @@ export function drawPlayer(ctx: Ctx, st: PlayerState, px: number, py: number, s:
   ctx.fillRect(px - 9 * s, by, 18 * s, 3 * s);
   ctx.fillStyle = st.hp > 50 ? "#3ddc84" : st.hp > 20 ? "#f2c94c" : "#ff5c5c";
   ctx.fillRect(px - 9 * s, by, (18 * s * st.hp) / 100, 3 * s);
-  if (style.label) outlinedText(ctx, style.label, px, py - rad - 4 * s, s, 10, "#fff");
+  if (style.label) outlinedText(ctx, style.label, px, py - rad - 4 * s, s, 10, style.hurt ? "#ff5c5c" : "#fff");
   if (style.weapon) {
     let y = by + 13 * s;
     if (st.weapon) {
@@ -572,6 +573,7 @@ export interface RoundDrawOpts {
   levelLabels?: boolean; // level names in the panel corner (default true)
   callouts?: boolean; // position names over the radar, under everything else
   flashMarks?: boolean; // where flashes popped, for a few seconds (default true)
+  damage?: boolean; // floating damage numbers over the victims (default true); the red flash is always on
   view?: View; // zoom and pan, the same for every panel (default: the whole radar)
 }
 
@@ -601,6 +603,36 @@ export function applyView(ctx: Ctx, v: View, k: number) {
   if (v.z === 1 && v.x === 0 && v.y === 0) return;
   ctx.scale(v.z, v.z);
   ctx.translate(-v.x * k, -v.y * k);
+}
+
+const HURT_FLASH_SEC = 0.5; // red name and outline after a hit
+const HURT_NUM_SEC = 0.8; // the floating damage number
+
+/** "-N" over a player: it rises and fades with the age of the latest hit; hits within the window add up. */
+function drawHurtNumber(ctx: Ctx, px: number, py: number, s: number, hit: { dmg: number; age: number }, alpha: number) {
+  const f = hit.age / HURT_NUM_SEC;
+  ctx.globalAlpha = alpha * (1 - f * f);
+  outlinedText(ctx, `-${hit.dmg}`, px, py - (24 + 14 * f) * s, s, 12, "#ff5c5c", true);
+  ctx.globalAlpha = 1;
+}
+
+/** Damage taken per victim in the last HURT_NUM_SEC up to `tick`: the sum and the age of the latest hit, in seconds. */
+function recentHurts(r: Replay, tick: number): Map<string, { dmg: number; age: number }> {
+  const h = r.hurts;
+  const out = new Map<string, { dmg: number; age: number }>();
+  if (!h?.tick.length) return out;
+  const from = tick - HURT_NUM_SEC * r.tick_rate;
+  let lo = 0, hi = h.tick.length; // first hit after `from`
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (h.tick[mid] <= from) lo = mid + 1;
+    else hi = mid;
+  }
+  for (let i = lo; i < h.tick.length && h.tick[i] <= tick; i++) {
+    const cur = out.get(h.victim[i]);
+    out.set(h.victim[i], { dmg: (cur?.dmg ?? 0) + h.dmg[i], age: (tick - h.tick[i]) / r.tick_rate });
+  }
+  return out;
 }
 
 /** One radar panel per entry of `levels`, `size` px each, side by side from x = 0. */
@@ -694,6 +726,7 @@ export function drawRound(ctx: CanvasRenderingContext2D, assets: MapAssets, r: R
     if (opts.shots) {
       drawShots(ctx, r, tick, P, s, meta.scale, (id) => vis(zOf.get(id)) === 1, (id) => sideColor(sideOf.get(id)));
     }
+    const hurts = recentHurts(r, tick);
     const shooting = new Set<string>();
     for (let q = r.shots.tick.length - 1; q >= 0 && r.shots.tick[q] >= tick - 3; q--) {
       if (r.shots.tick[q] <= tick) shooting.add(r.shots.player[q]);
@@ -716,7 +749,20 @@ export function drawRound(ctx: CanvasRenderingContext2D, assets: MapAssets, r: R
       drawPlayer(ctx, st, px, py, s, tick, {
         color: sideColor(st.p.side), alpha: vis(st.z), label: opts.names || focused(st) ? st.p.name : null,
         weapon: opts.weapons || focused(st), cone: true, shooting: shooting.has(st.p.steamid),
+        hurt: (hurts.get(st.p.steamid)?.age ?? Infinity) < HURT_FLASH_SEC,
       });
+      const hit = hurts.get(st.p.steamid);
+      if (hit && opts.damage !== false) drawHurtNumber(ctx, px, py, s, hit, vis(st.z));
+    }
+    // the killing blow: its victim is no longer drawn, so the number goes to the place of death
+    if (opts.damage !== false) {
+      const shown = new Set(states.filter((st) => st.hp > 0 && !Number.isNaN(st.x)).map((st) => st.p.steamid));
+      for (const kill of r.kills) {
+        const hit = kill.tick <= tick && !shown.has(kill.victim) ? hurts.get(kill.victim) : undefined;
+        if (!hit || kill.vx == null || kill.vy == null) continue;
+        const [px, py] = P(kill.vx, kill.vy);
+        drawHurtNumber(ctx, px, py, s, hit, vis(kill.vz));
+      }
     }
     if (opts.hoverKill >= 0) {
       const kill = r.kills[opts.hoverKill];
@@ -732,3 +778,6 @@ export function drawRound(ctx: CanvasRenderingContext2D, assets: MapAssets, r: R
     }
   });
 }
+
+/** "$12 350": money with a space as the thousands separator. */
+export const fmtMoney = (n: number) => `$${Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ")}`;

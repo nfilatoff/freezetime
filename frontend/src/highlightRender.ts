@@ -116,7 +116,7 @@ export function drawHighlight(ctx: CanvasRenderingContext2D, assets: MapAssets, 
   ctx.fillRect(0, 0, f.width, f.height);
 
   // radar
-  const opts = { names: f.names, weapons: false, trails: true, shots: true, hoverKill: -1, focus: f.focus };
+  const opts = { names: f.names, weapons: false, trails: true, shots: true, hoverKill: -1, focus: f.focus, damage: false };
   ctx.save();
   ctx.translate(0, headerH);
   ctx.beginPath();
