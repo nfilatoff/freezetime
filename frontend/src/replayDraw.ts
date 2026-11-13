@@ -4,6 +4,7 @@
 import { api, type Replay, type ReplayKill, type ReplayPlayer } from "./api";
 import { drawCallouts } from "./callouts";
 import { drawNadeIcon } from "./nadeIcons";
+import { drawEquipmentIcon } from "./equipmentIcons";
 import { RADAR_SIZE, drawRadar, levelLabel, levelOf, sideColor, worldToPx, type MapAssets } from "./radar";
 
 export const SMOKE_RADIUS = 144; // world units
@@ -258,8 +259,10 @@ export function drawPlayer(ctx: Ctx, st: PlayerState, px: number, py: number, s:
   if (style.weapon) {
     let y = by + 13 * s;
     if (st.weapon) {
-      outlinedText(ctx, weaponName(st.weapon), px, y, s, 9, "#e8edf2", true);
-      y += 3 * s;
+      if (!drawEquipmentIcon(ctx, st.weapon, px, y - 3 * s, 10 * s, 32 * s, "#e8edf2", "#000")) {
+        outlinedText(ctx, weaponName(st.weapon), px, y, s, 9, "#e8edf2", true);
+      }
+      y += 5 * s;
     }
     const pips = [...st.nades, ...(st.bomb ? ["c4"] : []), ...(st.kit ? ["kit"] : [])];
     const step = 8 * s;
@@ -274,15 +277,10 @@ export function drawPlayer(ctx: Ctx, st: PlayerState, px: number, py: number, s:
 
 const nadeName = (weapon: string) => ITEM_NADE[weapon] ?? null;
 
-/** A small marker for a carried item: grenades as coloured dots, C4 as a red square, a kit as a green one. */
+/** Carried grenades, C4 and defuse kit use the same silhouettes as the player panel. */
 function drawItemPip(ctx: Ctx, item: string, x: number, y: number, s: number, active: boolean) {
-  const r = 2.4 * s;
-  ctx.lineWidth = 1 * s;
-  ctx.strokeStyle = active ? "#fff" : "#000";
   if (item === "c4" || item === "kit") {
-    ctx.fillStyle = item === "c4" ? "#ff3030" : "#3ddc84";
-    ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
-    ctx.strokeRect(x - r, y - r, 2 * r, 2 * r);
+    drawEquipmentIcon(ctx, item, x, y, 8 * s, 7 * s, active ? "#fff" : item === "c4" ? "#ff6868" : "#86d7ae", "#000");
     return;
   }
   drawNadeIcon(ctx, item, x, y, 10 * s, active ? "#ffe27a" : "#fff", "#000");

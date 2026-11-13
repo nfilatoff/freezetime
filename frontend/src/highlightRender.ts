@@ -4,6 +4,7 @@
 import type { Highlight, MatchOverview, Replay } from "./api";
 import { RADAR_SIZE, levelOf, panelLevels, sideColor, worldToPx, type MapAssets } from "./radar";
 import { drawRound, playerState, weaponName } from "./replayDraw";
+import { drawEquipmentIcon, equipmentSize } from "./equipmentIcons";
 import { clockOf } from "./clipSummary";
 import { mapPretty } from "./components/MatchPicker";
 import { t, td } from "./i18n";
@@ -163,14 +164,14 @@ function drawKillFeed(ctx: CanvasRenderingContext2D, f: HlFrame, tick: number, u
   const font = `600 ${14 * u}px system-ui, sans-serif`;
   let y = f.headerH + 12 * u;
   for (const k of recent) {
-    const parts: [string, string][] = [
-      [k.attacker_name ?? "World", sideColor(k.attacker_side)],
-      [`${weaponName(k.weapon)}${k.headshot ? " ⌖" : ""}${k.wallbang ? " ⇥" : ""}${k.thrusmoke ? " ☁" : ""}`, "#ddd"],
-      [k.victim_name, sideColor(k.victim_side)],
-    ];
+    const icon = equipmentSize(k.weapon, 14 * u, 40 * u);
+    const fallback = icon.width ? "" : weaponName(k.weapon);
+    const flags = `${k.headshot ? " ⌖" : ""}${k.wallbang ? " ⇥" : ""}${k.thrusmoke ? " ☁" : ""}`;
+    const attacker = k.attacker_name ?? "World";
     ctx.font = font;
     const gap = 9 * u;
-    const w = parts.reduce((s, [text]) => s + ctx.measureText(text).width, 0) + gap * 2 + 20 * u;
+    const weaponWidth = icon.width + ctx.measureText(fallback + flags).width;
+    const w = ctx.measureText(attacker).width + weaponWidth + ctx.measureText(k.victim_name).width + gap * 2 + 20 * u;
     const h = 24 * u;
     const x = f.width - 10 * u - w;
     const mine = (k.attacker && f.focus.has(k.attacker)) || f.focus.has(k.victim);
@@ -183,11 +184,15 @@ function drawKillFeed(ctx: CanvasRenderingContext2D, f: HlFrame, tick: number, u
     }
     let cx = x + 10 * u;
     ctx.textAlign = "left";
-    for (const [text, color] of parts) {
-      ctx.fillStyle = color;
-      ctx.fillText(text, cx, y + 17 * u);
-      cx += ctx.measureText(text).width + gap;
-    }
+    ctx.fillStyle = sideColor(k.attacker_side);
+    ctx.fillText(attacker, cx, y + 17 * u);
+    cx += ctx.measureText(attacker).width + gap;
+    if (icon.width) drawEquipmentIcon(ctx, k.weapon, cx + icon.width / 2, y + h / 2, 14 * u, 40 * u, "#ddd");
+    ctx.fillStyle = "#ddd";
+    ctx.fillText(fallback + flags, cx + icon.width, y + 17 * u);
+    cx += weaponWidth + gap;
+    ctx.fillStyle = sideColor(k.victim_side);
+    ctx.fillText(k.victim_name, cx, y + 17 * u);
     y += h + 4 * u;
   }
 }

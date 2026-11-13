@@ -3,6 +3,7 @@ import type { Replay, ReplayKill } from "../api";
 import { sideColor, sideShort } from "../radar";
 import { ROUND_TIME, UNITS_PER_METER, fmtClock, weaponName } from "../replayDraw";
 import { t, td } from "../i18n";
+import { EquipmentIcon } from "./EquipmentIcon";
 
 export function KillCard({ r, kill, x, y, maxX }: { r: Replay; kill: ReplayKill; x: number; y: number; maxX: number }) {
   const sec = (kill.tick - r.freeze_end_tick) / r.tick_rate;
@@ -19,7 +20,7 @@ export function KillCard({ r, kill, x, y, maxX }: { r: Replay; kill: ReplayKill;
     <div className="kill-card" style={{ left, top: Math.max(4, y - 20) }}>
       <div className="kc-head">
         <span style={{ color: sideColor(kill.attacker_side) }}>{kill.attacker_name ?? "World"}</span>
-        <span className="kc-weapon">{weaponName(kill.weapon)}</span>
+        <span className="kc-weapon"><EquipmentIcon item={kill.weapon} size={14} maxWidth={40} title={weaponName(kill.weapon)} fallback={weaponName(kill.weapon)} /></span>
         <span style={{ color: sideColor(kill.victim_side) }}>{kill.victim_name}</span>
       </div>
       <div className="muted small">

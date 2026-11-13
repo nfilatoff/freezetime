@@ -280,15 +280,20 @@ tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .pl.dead { opacity: 0.4; }
 .pl-top { display: flex; justify-content: space-between; gap: 4px; }
 .pl-name { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pl-icons { font-size: 12px; }
+.pl-icons { display: flex; flex: none; align-items: center; gap: 5px; color: var(--muted); }
 .hp { position: relative; height: 12px; background: #000; border-radius: 3px; overflow: hidden; margin: 4px 0; }
 .hp div { height: 100%; }
 .hp span { position: absolute; right: 4px; top: -2px; font-size: 10px; color: #fff; font-weight: 600; }
 .pl-weapon { display: flex; justify-content: space-between; gap: 6px; font-size: 11px; color: #bdbdbd; }
 .pl-tally { display: flex; gap: 5px; flex: none; white-space: nowrap; }
-.pl-inv { display: flex; flex-wrap: wrap; gap: 3px 6px; align-items: center; font-size: 11px; color: var(--muted); margin-top: 2px; }
-.pl-inv span.on { color: var(--text); font-weight: 600; }
-.nade-icon { flex: none; }
+.pl-inv { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; min-height: 18px; color: #b9bec5; margin-top: 3px; }
+.pl-gun { display: inline-flex; flex: none; align-items: center; }
+.pl-gun.on, .pl-nades .on { color: #fff; }
+.pl-held { display: flex; align-items: center; gap: 5px; }
+.pl-nades { display: flex; flex: none; flex-wrap: wrap; max-width: 100%; align-items: center; justify-content: flex-end; gap: 4px; margin-left: auto; }
+.equipment-icon, .nade-icon { display: inline-block; flex: none; vertical-align: middle; }
+.equipment-fallback { font-size: 10px; }
+.kill .weapon, .kc-weapon { display: inline-flex; align-items: center; gap: 3px; }
 .killfeed { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; pointer-events: none; }
 .kill { background: rgba(0, 0, 0, 0.75); padding: 3px 9px; border-radius: 4px; font-size: 12px; display: flex; gap: 8px; }
 .kill .weapon { color: #ddd; }
@@ -300,7 +305,7 @@ tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .tl-bomb { position: absolute; top: 14px; margin-left: -7px; font-size: 13px; }
 /* grenades on the timeline: icon tinted in the thrower's side colour, under the kill marks */
 .tl-nade { position: absolute; top: 18px; width: 12px; height: 16px; margin-left: -6px; display: flex; align-items: center; justify-content: center; }
-.tl-nade svg { display: block; width: 8px; height: 12px; }
+.tl-nade svg { display: block; max-width: 10px; max-height: 12px; }
 .tl-head { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); margin-left: -1px; box-shadow: 0 0 8px var(--accent); }
 .controls { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .controls .play, .clip-main .play { min-width: 48px; font-size: 16px; background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }

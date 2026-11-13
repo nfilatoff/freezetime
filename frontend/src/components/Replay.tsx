@@ -5,7 +5,7 @@ import { PEN_COLORS, PEN_WIDTHS, boardFromFrame, drawMarks, emptyBoard, hitTest,
 import { useFitHeight } from "../fit";
 import { CT_COLOR, RADAR_SIZE, T_COLOR, levelLabel, levelOf, panelLevels, sideColor, sideShort, useMapAssets, worldToPx } from "../radar";
 import {
-  BOMB_TIME, NO_VIEW, ROUND_TIME, bombState, drawRound, fmtClock, fmtMoney, frameAt, killAt, loadReplay, panBy, playerStates, throwAt, toRadar, weaponName, zoomAt,
+  BOMB_TIME, NO_VIEW, ROUND_TIME, bombState, drawRound, fmtClock, fmtMoney, frameAt, killAt, loadReplay, nadeOfItem, panBy, playerStates, throwAt, toRadar, weaponName, zoomAt,
   type PlayerState, type View,
 } from "../replayDraw";
 import { useCalloutMode } from "../callouts";
@@ -14,6 +14,7 @@ import { buyLabel } from "../clipSummary";
 import { CalloutToggle } from "./CalloutToggle";
 import { ToolIcon } from "./Icons";
 import { NadeIcon } from "./NadeIcon";
+import { EquipmentIcon } from "./EquipmentIcon";
 import { KillCard } from "./KillCard";
 import { shareUrl } from "../share";
 import { NoteForm, RoundNotes, StarForm } from "./ReplayExtras";
@@ -700,7 +701,7 @@ function Clock({ r, tick }: { r: Replay; tick: number }) {
   if (tick < r.freeze_end_tick) return <span className="clock">{t("clock.freeze", { t: fmtClock((r.freeze_end_tick - tick) / r.tick_rate) })}</span>;
   if (bomb.planted && !bomb.defused) {
     const left = BOMB_TIME - (tick - bomb.planted.tick) / r.tick_rate;
-    return <span className="clock bomb">💣 {bomb.planted.site} {fmtClock(left)}</span>;
+    return <span className="clock bomb"><EquipmentIcon item="c4" size={16} maxWidth={20} /> {bomb.planted.site} {fmtClock(left)}</span>;
   }
   if (bomb.defused) return <span className="clock defused">{t("replay.defused")}</span>;
   return <span className="clock">{fmtClock(ROUND_TIME - (tick - r.freeze_end_tick) / r.tick_rate)}</span>;
@@ -762,26 +763,25 @@ function TeamPanel({ states, head, title, color, onCopy, tally, height }: { stat
           <div className="pl-top">
             <span className="pl-name">{s.p.name}</span>
             <span className="pl-icons">
-              {s.bomb && <span title={t("pl.bomb")}>💣</span>}
-              {s.kit && <span title={t("pl.kit")}>✂</span>}
-              {s.armor > 0 && <span title={t("pl.armor", { n: s.armor })}>{s.helmet ? "⛑" : "🛡"}</span>}
+              {s.bomb && <EquipmentIcon item="c4" size={13} maxWidth={17} title={t("pl.bomb")} />}
+              {s.kit && <EquipmentIcon item="kit" size={13} maxWidth={17} title={t("pl.kit")} />}
+              {s.armor > 0 && <EquipmentIcon item={s.helmet ? "armor_helmet" : "armor"} size={13} maxWidth={17} title={t("pl.armor", { n: s.armor })} />}
             </span>
           </div>
           <div className="hp"><div style={{ width: `${s.hp}%`, background: color }} /><span>{s.hp}</span></div>
           <div className="pl-weapon">
-            <span>{[
-              // the active gun is highlighted in the inventory line below; other active items are named here
-              s.hp <= 0 ? "DEAD" : s.p.inv && (s.weapon === s.primary || s.weapon === s.secondary) ? null : weaponName(s.weapon),
-              s.money !== null ? `$${s.money}` : null,
-            ].filter(Boolean).join(" · ")}</span>
+            <span className="pl-held">
+              {s.hp <= 0 ? "DEAD" : !(s.p.inv && (s.weapon === s.primary || s.weapon === s.secondary)) && <EquipmentIcon item={s.weapon} size={12} maxWidth={30} title={weaponName(s.weapon)} fallback={weaponName(s.weapon)} />}
+              {s.money !== null && <span>{`$${s.money}`}</span>}
+            </span>
             <PlayerTally {...(tally.get(s.p.steamid) ?? { dmg: 0, kills: 0 })} />
           </div>
           {s.hp > 0 && (s.primary || s.secondary || s.nades.length > 0) && (
             <div className="pl-inv">
               {[s.primary, s.secondary].filter(Boolean).map((w) => (
-                <span key={w} className={w === s.weapon ? "on" : ""}>{weaponName(w)}</span>
+                <span key={w} className={`pl-gun ${w === s.weapon ? "on" : ""}`}><EquipmentIcon item={w} size={15} maxWidth={46} title={weaponName(w)} fallback={weaponName(w)} /></span>
               ))}
-              {s.nades.map((n, i) => <NadeIcon key={i} type={n} color="var(--text)" size={13} title={td(`board.nade.${n}`, n)} />)}
+              <span className="pl-nades">{s.nades.map((n, i) => <span key={i} className={s.weapon && nadeOfItem(s.weapon) === n ? "on" : ""}><NadeIcon type={n} size={13} title={td(`board.nade.${n}`, n)} /></span>)}</span>
             </div>
           )}
         </div>
@@ -798,7 +798,7 @@ function KillFeed({ r, tick }: { r: Replay; tick: number }) {
         <div key={i} className="kill">
           <span style={{ color: sideColor(k.attacker_side) }}>{k.attacker_name ?? "World"}</span>
           <span className="weapon">
-            {k.flashed ? "◐ " : ""}{weaponName(k.weapon)}{k.headshot ? " ⌖" : ""}{k.wallbang ? " ⇥" : ""}{k.thrusmoke ? " ☁" : ""}
+            {k.flashed ? "◐ " : ""}<EquipmentIcon item={k.weapon} size={14} maxWidth={40} title={weaponName(k.weapon)} fallback={weaponName(k.weapon)} />{k.headshot ? " ⌖" : ""}{k.wallbang ? " ⇥" : ""}{k.thrusmoke ? " ☁" : ""}
           </span>
           <span style={{ color: sideColor(k.victim_side) }}>{k.victim_name}</span>
         </div>
@@ -853,7 +853,7 @@ function Timeline({ r, tick, onSeek, notes }: { r: Replay; tick: number; onSeek:
       ))}
       {r.bomb.filter((b) => b.event === "finish_plant" || b.event === "defuse").map((b, i) => (
         <div key={i} className="tl-bomb" style={{ left: pct(b.tick) }} title={b.event === "defuse" ? t("tl.defuse") : t("tl.plant", { site: b.site })}>
-          {b.event === "defuse" ? "✂" : "💣"}
+          <EquipmentIcon item={b.event === "defuse" ? "kit" : "c4"} size={13} maxWidth={15} />
         </div>
       ))}
       {notes.map((n) => (

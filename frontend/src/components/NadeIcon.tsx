@@ -1,20 +1,8 @@
-import { NADE_PATH, NADE_VIEW, isNadeType } from "../nadeIcons";
+import { isNadeType } from "../nadeIcons";
+import { EquipmentIcon } from "./EquipmentIcon";
 
-/** An inline grenade silhouette `size` px tall; unknown types render as a dot. */
+/** An upright CS2 grenade silhouette; unknown types retain the dot fallback. */
 export function NadeIcon({ type, color = "currentColor", size = 13, title }: { type: string; color?: string; size?: number; title?: string }) {
-  const known = isNadeType(type);
-  return (
-    <svg
-      className="nade-icon"
-      viewBox={`0 0 ${NADE_VIEW.w} ${NADE_VIEW.h}`}
-      height={size}
-      width={(size * NADE_VIEW.w) / NADE_VIEW.h}
-      role="img"
-      style={{ fill: color }}
-      aria-label={title}
-    >
-      {title && <title>{title}</title>}
-      {known ? <path d={NADE_PATH[type]} fillRule="evenodd" /> : <circle cx={8} cy={12} r={6} />}
-    </svg>
-  );
+  if (isNadeType(type)) return <EquipmentIcon item={type} size={size} maxWidth={size} title={title} className="nade-icon" color={color} />;
+  return <svg className="nade-icon" viewBox="0 0 16 24" width={size * 2 / 3} height={size} fill={color} role={title ? "img" : undefined} aria-label={title} aria-hidden={title ? undefined : true}>{title && <title>{title}</title>}<circle cx={8} cy={12} r={6} /></svg>;
 }
