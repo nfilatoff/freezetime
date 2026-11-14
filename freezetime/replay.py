@@ -11,7 +11,9 @@ Frames come from ``replay.parquet`` (every few ticks, written by ``extract``); o
 extracts without it fall back to the 0.5 s snapshots. Inventories always come from the snapshots (they change rarely).
 
 ``seen_by`` is an approximation from map geometry (``freezetime.visibility``): per frame, a bitmask of the indices
-(in ``players``) of the enemies that see the player; None when the map's mesh is not cached.
+(in ``players``) of the enemies that see the player; None when the map's mesh is not cached. A round built before
+the mesh was cached is rebuilt the next time it is requested, once the mesh appears (``round_payload`` also checks
+the mesh's mtime, see ``visibility.mesh_stamp``).
 """
 
 from __future__ import annotations
@@ -25,7 +27,7 @@ import polars as pl
 
 from freezetime.context import Match, load_match
 from freezetime.lineups import MATCH_DIST, MATCH_TICKS, WEAPON_TYPE
-from freezetime.visibility import checker, reaction_times, round_visibility
+from freezetime.visibility import checker, mesh_stamp, reaction_times, round_visibility
 
 FORMAT = 11  # bump when the document changes; old cache files are then ignored
 PRE_FREEZE_SEC = 20.0  # replay starts at most this long before freeze end
@@ -47,11 +49,17 @@ def _match(directory: Path, _stamp: float) -> Match:
 
 
 def round_payload(directory: str | Path, round_num: int) -> bytes:
-    """Gzipped JSON replay of one round, built once and then read from the cache."""
+    """Gzipped JSON replay of one round, built once and then read from the cache.
+
+    The cache file is rebuilt when the manifest changed, or when the map's visibility mesh was cached after
+    it (a round built without a mesh is missing ``seen_by``/reaction and must pick it up once it appears).
+    """
     directory = Path(directory)
     path = cache_path(directory, round_num)
     stamp = (directory / "manifest.json").stat().st_mtime
-    if path.exists() and path.stat().st_mtime >= stamp:
+    mesh = mesh_stamp(directory)
+    valid_from = max(stamp, mesh[1]) if mesh else stamp
+    if path.exists() and path.stat().st_mtime >= valid_from:
         return path.read_bytes()
     doc = build_round(_match(directory, stamp), round_num)
     data = gzip.compress(json.dumps(doc, separators=(",", ":")).encode("utf-8"), compresslevel=6)

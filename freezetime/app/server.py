@@ -45,8 +45,8 @@ from freezetime.highlights import add_custom, delete_custom, highlights, kill_cl
 from freezetime.lineups import MAP_RE, PRACTICE, cfg_name, lineup_cfg, lineup_commands, list_cfg, safe_text, throws
 from freezetime.maps import ZoneError, available_maps, load_map_config, save_zones
 from freezetime.player_stats import player_stats
-from freezetime.replay import PLAYER_STATE_COLUMNS, round_payload
-from freezetime.visibility import mesh_path
+from freezetime.replay import PLAYER_STATE_COLUMNS, actual_damage, round_payload
+from freezetime.visibility import mesh_stamp
 from freezetime.scout import MatchData, dossier, match_data, playbook as discovered_playbook, roster_suggestions, select_rounds, similar_rounds, strategy_stats
 from freezetime.tactics import tactics, userid_map, utility_events
 from freezetime.team_stats import team_stats
@@ -216,13 +216,6 @@ def _overview(d: Path, _stamp: float) -> dict:
     }
 
 
-def _mesh_stamp(d: Path) -> tuple[str, float] | None:
-    """The match map's cached visibility mesh (path, mtime) or None: a mesh cached later adds reaction times, so it is part of the cache key."""
-    manifest = json.loads((d / "manifest.json").read_text(encoding="utf-8"))
-    path = mesh_path(str(manifest["header"].get("map_name", "")))
-    return (str(path), path.stat().st_mtime) if path else None
-
-
 @lru_cache(maxsize=16)
 def _player_stats(d: Path, _stamp: float, _mesh: tuple[str, float] | None) -> dict:
     return player_stats(d)
@@ -328,8 +321,9 @@ def _points(d: Path, _stamp: float) -> dict:
     shots = _with_context(shots, ctx, alive, "team", "side")
     shots = shots.select("round_num", "sec", "steamid", "name", "side", "team", "weapon",
                          x=pl.col("x").round(0), y=pl.col("y").round(0), z=pl.col("z").round(0), *CONTEXT_COLS)
-    dmg = _with_context(_sec(_teams_for(with_round(m.data["damages"], m.rounds), m.teams, "attacker", "victim"), rate), ctx, alive, "attacker_team", "attacker_side").select(
-        "round_num", "sec", "weapon", *CONTEXT_COLS, dmg=pl.col("dmg_health"),
+    dmg_actual = actual_damage(with_round(m.data["damages"], m.rounds), ("round_num",))
+    dmg = _with_context(_sec(_teams_for(dmg_actual, m.teams, "attacker", "victim"), rate), ctx, alive, "attacker_team", "attacker_side").select(
+        "round_num", "sec", "weapon", *CONTEXT_COLS, dmg=pl.col("dmg"),
         attacker_name="attacker_name", attacker_side="attacker_side", attacker_team="attacker_team",
         attacker_x=pl.col("attacker_x").round(0), attacker_y=pl.col("attacker_y").round(0), attacker_z=pl.col("attacker_z").round(0),
         victim_name="victim_name", victim_side="victim_side", victim_team="victim_team",
@@ -725,7 +719,7 @@ def create_app(out: str | Path = "out") -> FastAPI:
     def match_player_stats(match_id: str) -> dict:
         """Per player: kills by weapon, accuracy (shots and hits) and flashes (freezetime/player_stats.py)."""
         d = lib.match_dir(match_id)
-        return _player_stats(d, _stamp(d), _mesh_stamp(d))
+        return _player_stats(d, _stamp(d), mesh_stamp(d))
 
     @api.get("/api/matches/{match_id}/tactics")
     def match_tactics(match_id: str) -> dict:

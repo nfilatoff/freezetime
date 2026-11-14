@@ -6,7 +6,7 @@ import pytest
 
 from freezetime.aggregate import aggregate
 from freezetime.app.server import _points, _scouted_points, create_app
-from freezetime.context import load_match
+from freezetime.context import load_match, with_round
 from freezetime.scout import dossier, match_data, roster_suggestions, select_rounds, similar_rounds, strategy_stats
 
 
@@ -227,6 +227,47 @@ def test_points_have_context(dust2_mini):
     kill = next(k for k in points["kills"] if k["round_num"] == 2 and k["attacker_team"] == row["team"])
     assert (kill["buy"], kill["opp_buy"]) == (row["buy"], row["opp_buy"])
     json.dumps(points, allow_nan=False)
+
+
+def test_points_damage_has_no_overkill(dust2_mini):
+    """The ``damages`` heatmap table uses actual damage (no overkill): one victim never takes more than 100 a round."""
+    points = _points(dust2_mini, 0.0)
+    totals = pl.DataFrame(points["damages"]).group_by("round_num", "victim_name").agg(pl.col("dmg").sum().alias("total"))
+    assert totals.height > 0
+    assert totals["total"].max() <= 100
+    assert (totals["total"] > 0).any()  # not every hit is armour-only
+
+
+def test_player_damage_matches_actual_damage_and_caps_at_100(data, dust2_mini):
+    """``MatchData.players.damage`` (per round, per attacker) matches a plain-Python recomputation of actual
+    damage (health actually taken, no overkill), independent of ``freezetime.replay.actual_damage``, over every
+    round and attacker that dealt damage; no round's cross-side hits give up more than 100 health to one victim."""
+    m = load_match(dust2_mini, extra_tables=("fires", "shots", "damages"))
+    rows = with_round(m.data["damages"], m.rounds).sort("tick", "health_post", descending=[False, True]).iter_rows(named=True)
+
+    # Running health, computed independently of actual_damage: a hit's dmg_health is capped by the victim's
+    # health before it (their previous health_post this round, or 100 at the first hit of their life).
+    previous_health: dict[tuple[int, int], int] = {}
+    attacker_totals: dict[tuple[int, int], int] = {}
+    victim_totals: dict[tuple[int, int], int] = {}
+    for r in rows:
+        if r["dmg_health"] is None:
+            continue
+        vkey = (r["round_num"], r["victim_steamid"])
+        before = previous_health.get(vkey, 100)
+        dmg = max(0, min(r["dmg_health"], before))
+        previous_health[vkey] = r["health_post"]
+        victim_totals[vkey] = victim_totals.get(vkey, 0) + dmg
+        if r["attacker_side"] != r["victim_side"]:
+            akey = (r["round_num"], r["attacker_steamid"])
+            attacker_totals[akey] = attacker_totals.get(akey, 0) + dmg
+
+    checked = 0
+    for row in data.players.filter(pl.col("damage") > 0).iter_rows(named=True):
+        assert row["damage"] == attacker_totals.get((row["round_num"], row["steamid"]), 0)
+        checked += 1
+    assert checked > 0
+    assert max(victim_totals.values()) <= 100
 
 
 def test_zooms_from_the_event(dust2_mini, tmp_path):

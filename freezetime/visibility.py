@@ -16,6 +16,7 @@ without ``replay.parquet``), so every tick found here is precise to one frame.
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 from bisect import bisect_right
@@ -41,26 +42,38 @@ def mesh_path(map_name: str) -> Path | None:
     return found[0] if found else None
 
 
+def mesh_stamp(directory: Path) -> tuple[str, float] | None:
+    """A match's cached visibility mesh (path, mtime) or None: the map comes from its ``manifest.json``.
+
+    Shared by callers that must notice a mesh cached after they last looked (a result built without one
+    is missing ``seen_by``/reaction and should be rebuilt once the mesh appears).
+    """
+    manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+    path = mesh_path(str(manifest["header"].get("map_name", "")))
+    return (str(path), path.stat().st_mtime) if path else None
+
+
 log = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=8)
-def _load(path: Path):
+def _load(path: Path, _mtime: float):
     from awpy import VisibilityChecker
 
     return VisibilityChecker(path)
 
 
 def checker(map_name: str):
-    """awpy's ``VisibilityChecker`` of a map (built once per mesh), or None without a cached or loadable mesh.
+    """awpy's ``VisibilityChecker`` of a map (built once per mesh file), or None without a cached or loadable mesh.
 
-    A missing mesh is looked up again on every call (it may be cached later); only loaded checkers are kept.
+    A missing mesh is looked up again on every call (it may be cached later); only loaded checkers are kept, keyed
+    by the mesh file's mtime too, so a mesh replaced in place (not just a newly appearing one) is reloaded.
     """
     path = mesh_path(map_name)
     if path is None:
         return None
     try:
-        return _load(path)
+        return _load(path, path.stat().st_mtime)
     except Exception as e:  # a broken mesh or an awpy without the checker: visibility is unavailable
         log.warning("visibility mesh %s failed to load: %s", path, e)
         return None

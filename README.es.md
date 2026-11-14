@@ -91,7 +91,7 @@ En la consola de Windows, para cirílico y caracteres especiales en la salida, d
 freezetime app                      # http://127.0.0.1:8000, el navegador se abre solo
 ```
 
-El acceso directo del escritorio (`start-freezetime.cmd`) recompila la aplicación web antes de iniciarla si sus fuentes cambiaron, por ejemplo tras `git pull` (requiere Node.js; la misma comprobación a mano: `scripts\ensure-frontend.ps1`).
+El acceso directo del escritorio (`start-freezetime.cmd`) recompila la aplicación web antes de iniciarla si sus fuentes cambiaron, por ejemplo tras `git pull` (requiere Node.js; la misma comprobación a mano: `scripts\ensure-frontend.ps1`). Si la compilación actual está en uso (por ejemplo, por una instancia de la aplicación ya en marcha), la recompilación se omite y la aplicación arranca con la compilación que ya tiene.
 
 En «Biblioteca» añade una carpeta con demos (por ejemplo, `D:\Steam\steamapps\common\Counter-Strike Global Offensive\game\csgo`) o sube archivos con el botón «Subir .dem o archivo…» o arrastrándolos a la página. Las demos de carpetas se analizan con el botón «Analizar», las subidas, al momento. El análisis va en segundo plano con progreso; una demo de 250–300 MB se analiza en 20–30 s. Las demos ya analizadas no se vuelven a analizar.
 
@@ -153,7 +153,7 @@ Tests: `pytest`. El fixture son las rondas 1–8 de una partida de Dust2, genera
 | Ruta | Contenido |
 |---|---|
 | `out/<demo>/` | Exportación de una demo (ver abajo). |
-| `out/<demo>/replay/round_<n>.v<k>.json.gz` | Caché de datos de repetición por ronda; se crea al abrir la ronda por primera vez (repetición o clip). Si cambia el formato (`k`), los archivos antiguos se ignoran. |
+| `out/<demo>/replay/round_<n>.v<k>.json.gz` | Caché de datos de repetición por ronda; se crea al abrir la ronda por primera vez (repetición o clip). Si cambia el formato (`k`), los archivos antiguos se ignoran, y un archivo de caché anterior a la malla de visibilidad del mapa en `~/.awpy` se reconstruye en cuanto esa malla queda en caché. |
 | `out/<demo>/viz/` | Imágenes de `freezetime viz`. |
 | `out/<name>/` | Resultado de `freezetime batch`. |
 | `out/maps/` | Dibujos de `freezetime viz zones`. |

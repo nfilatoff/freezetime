@@ -177,7 +177,7 @@ function drawKillFeed(ctx: CanvasRenderingContext2D, f: HlFrame, tick: number, u
     };
     const pieces: Piece[] = [];
     if (attackerBlind(f.r, k)) pieces.push(feed("blind", "#ddd"));
-    pieces.push(text(k.attacker_name ?? "World", sideColor(k.attacker_side)));
+    pieces.push(text(k.attacker_name ?? t("replay.world"), sideColor(k.attacker_side)));
     if (k.assister_name) {
       pieces.push(text("+", "#aaa"));
       if (k.flashed) pieces.push(feed("flashassist"));

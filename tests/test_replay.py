@@ -4,9 +4,10 @@ import shutil
 
 import polars as pl
 
+import freezetime.replay as replay
 from freezetime.context import load_match
 from freezetime.extract import REPLAY_COLUMNS, write_replay
-from freezetime.replay import _state_flags, build_round, round_payload
+from freezetime.replay import _state_flags, actual_damage, build_round, round_payload
 
 
 def test_round_document(dust2_mini):
@@ -87,6 +88,74 @@ def test_payload_is_cached(dust2_mini, tmp_path):
     assert list((d / "replay").glob("round_3.*.json.gz"))
     assert round_payload(d, 3) == first
     assert json.loads(gzip.decompress(first))["round"] == 3
+
+
+def test_cache_rebuilt_once_mesh_appears_after_it(dust2_mini, tmp_path, monkeypatch):
+    """A round cached without a mesh (no ``seen_by``/reaction) is rebuilt once the mesh is cached later."""
+    d = tmp_path / "m"
+    shutil.copytree(dust2_mini, d)
+    # No mesh at all (not even a real ~/.awpy one): checker() must not be asked to load a real mesh file.
+    monkeypatch.setattr(replay, "checker", lambda _map: None)
+    monkeypatch.setattr(replay, "mesh_stamp", lambda directory: None)
+    round_payload(d, 3)
+    path = replay.cache_path(d, 3)
+    old_mtime = path.stat().st_mtime
+
+    rebuilt = []
+    real_build_round = replay.build_round
+    monkeypatch.setattr(replay, "build_round", lambda *a, **k: rebuilt.append(1) or real_build_round(*a, **k))
+    monkeypatch.setattr(replay, "mesh_stamp", lambda directory: ("fake.mesh", old_mtime + 5))
+    data = round_payload(d, 3)
+    assert rebuilt  # the mesh is newer than the cache, so the round was rebuilt
+    doc = json.loads(gzip.decompress(data))
+    assert all(p["seen_by"] is None for p in doc["players"])  # still no real checker, so no visibility data
+
+
+def test_cache_reused_when_mesh_is_older(dust2_mini, tmp_path, monkeypatch):
+    """A mesh already cached before the round was built does not force a rebuild."""
+    d = tmp_path / "m"
+    shutil.copytree(dust2_mini, d)
+    monkeypatch.setattr(replay, "checker", lambda _map: None)
+    monkeypatch.setattr(replay, "mesh_stamp", lambda directory: None)
+    round_payload(d, 3)
+    path = replay.cache_path(d, 3)
+    mtime = path.stat().st_mtime
+
+    def _fail(*_a, **_k):
+        raise AssertionError("round should not be rebuilt")
+
+    monkeypatch.setattr(replay, "build_round", _fail)
+    monkeypatch.setattr(replay, "mesh_stamp", lambda directory: ("fake.mesh", mtime - 5))
+    round_payload(d, 3)
+    assert path.stat().st_mtime == mtime
+
+
+def test_actual_damage_caps_overkill_and_resets_at_round_boundary():
+    # victim 1, round 1: a world hit (no attacker), a gun hit, then a null-dmg_health row (dropped), then
+    # an overkill lethal hit; round 2 is a fresh life for the same victim.
+    d = pl.DataFrame({
+        "tick": [5, 10, 15, 20, 30],
+        "round_num": [1, 1, 1, 1, 2],
+        "victim_steamid": [1, 1, 1, 1, 1],
+        "attacker_steamid": [None, 2, 2, 2, 2],
+        "dmg_health": [20, 20, None, 100, 30],
+        "health_post": [80, 60, 50, 0, 70],
+    })
+    nonnull = d.filter(pl.col("dmg_health").is_not_null())
+    out = actual_damage(d, ("round_num",))
+    assert out.height == nonnull.height  # the null dmg_health row is dropped, the null-attacker (world) row kept
+    assert set(out["tick"].to_list()) == {5, 10, 20, 30}
+
+    by_tick = dict(zip(out["tick"].to_list(), out["dmg"].to_list(), strict=True))
+    assert by_tick == {5: 20, 10: 20, 20: 60, 30: 30}  # health_post 80, 60, 0 caps the lethal hit's dmg at 60
+
+    totals = out.group_by("round_num", "victim_steamid").agg(pl.col("dmg").sum().alias("total"))
+    assert totals["total"].max() <= 100  # no life, even with an overkill hit, gives up more than 100 health
+
+    # without a round reset, the round 2 hit would wrongly inherit round 1's health_post of 0
+    no_reset = actual_damage(d)
+    assert dict(zip(no_reset["tick"].to_list(), no_reset["dmg"].to_list(), strict=True))[30] == 0
+    assert by_tick[30] == 30  # with by=("round_num",) the victim's HP resets to 100 for the new round
 
 
 def test_inventory_shots_and_duels(dust2_mini):

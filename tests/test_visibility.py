@@ -1,6 +1,10 @@
+import sys
+import types
+
 import polars as pl
 import pytest
 
+from freezetime import visibility
 from freezetime.context import load_match
 from freezetime.replay import round_frames
 from freezetime.visibility import MAX_REACTION_SEC, bloomed, checker, mesh_path, reaction_times, round_visibility, sees
@@ -52,6 +56,29 @@ def test_sees_through_a_smoke_only_while_it_burns():
 def test_mesh_path_for_an_unknown_map():
     assert mesh_path("de_nonexistent_map") is None
     assert checker("de_nonexistent_map") is None
+
+
+def test_load_mesh_cache_is_keyed_by_mtime_too(tmp_path, monkeypatch):
+    """A mesh file replaced in place (same path, new mtime) is reloaded, not served stale from the cache."""
+    built = []
+
+    class FakeChecker:
+        def __init__(self, path):
+            built.append(path)
+
+    fake_awpy = types.ModuleType("awpy")
+    fake_awpy.VisibilityChecker = FakeChecker
+    monkeypatch.setitem(sys.modules, "awpy", fake_awpy)
+    visibility._load.cache_clear()
+    path = tmp_path / "de_dust2.mesh"
+    path.write_bytes(b"mesh")
+
+    a = visibility._load(path, 100.0)
+    b = visibility._load(path, 100.0)
+    assert a is b and len(built) == 1  # same path, same mtime: served from the cache
+
+    c = visibility._load(path, 200.0)
+    assert c is not a and len(built) == 2  # the mesh was replaced in place: reloaded
 
 
 def test_round_visibility_and_reactions_with_the_real_mesh(dust2_mini):

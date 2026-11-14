@@ -91,7 +91,7 @@ In the Windows console, set `$env:PYTHONIOENCODING = "utf-8"` for Cyrillic and s
 freezetime app                      # http://127.0.0.1:8000, the browser opens by itself
 ```
 
-The desktop shortcut (`start-freezetime.cmd`) rebuilds the web app before starting when its sources changed, for example after `git pull` (needs Node.js; the same check by hand: `scripts\ensure-frontend.ps1`).
+The desktop shortcut (`start-freezetime.cmd`) rebuilds the web app before starting when its sources changed, for example after `git pull` (needs Node.js; the same check by hand: `scripts\ensure-frontend.ps1`). If the current build is locked (e.g. by an already running app), the rebuild is skipped and the app starts with the build it already has.
 
 In "Library", add a folder with demos (for example, `D:\Steam\steamapps\common\Counter-Strike Global Offensive\game\csgo`) or upload files with the "Upload .dem or archive…" button or by dragging them onto the page. Demos from folders are parsed with the "Parse" button, uploaded ones right away. Parsing runs in the background with progress; a 250–300 MB demo is parsed in 20–30 s. Already parsed demos are not parsed again.
 
@@ -153,7 +153,7 @@ Tests: `pytest`. The fixture is rounds 1–8 of one Dust2 match, built by `tests
 | Path | Contents |
 |---|---|
 | `out/<demo>/` | Output of one demo (see below). |
-| `out/<demo>/replay/round_<n>.v<k>.json.gz` | Per-round replay data cache; created the first time a round is opened (replay or clip). When the format (`k`) changes, old files are ignored. |
+| `out/<demo>/replay/round_<n>.v<k>.json.gz` | Per-round replay data cache; created the first time a round is opened (replay or clip). When the format (`k`) changes, old files are ignored, and a cache file older than the map's visibility mesh in `~/.awpy` is rebuilt once the mesh is cached. |
 | `out/<demo>/viz/` | `freezetime viz` images. |
 | `out/<name>/` | `freezetime batch` result. |
 | `out/maps/` | `freezetime viz zones` renders. |

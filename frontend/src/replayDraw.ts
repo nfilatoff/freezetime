@@ -5,6 +5,7 @@ import { api, type Replay, type ReplayKill, type ReplayPlayer } from "./api";
 import { drawCallouts } from "./callouts";
 import { drawNadeIcon } from "./nadeIcons";
 import { drawEquipmentIcon } from "./equipmentIcons";
+import { t, type Key } from "./i18n";
 import { RADAR_SIZE, drawRadar, levelLabel, levelOf, sideColor, worldToPx, type MapAssets } from "./radar";
 
 export const SMOKE_RADIUS = 144; // world units
@@ -18,18 +19,25 @@ export const NADE_COLORS: Record<string, string> = {
 const ITEM_NADE: Record<string, string> = {
   smokegrenade: "smoke", flashbang: "flashbang", hegrenade: "he", molotov: "molotov", incendiary: "incendiary", decoy: "decoy",
 };
+// Gun model names: the real in-game names, not translated.
 const WEAPON_NAMES: Record<string, string> = {
   ak47: "AK-47", m4a1: "M4A4", m4a1_silencer: "M4A1-S", awp: "AWP", ssg08: "Scout", galilar: "Galil", famas: "FAMAS",
   aug: "AUG", sg556: "SG 553", g3sg1: "G3SG1", scar20: "SCAR-20", mac10: "MAC-10", mp9: "MP9", mp7: "MP7", mp5sd: "MP5",
   ump45: "UMP", p90: "P90", bizon: "Bizon", nova: "Nova", xm1014: "XM1014", mag7: "MAG-7", sawedoff: "Sawed-Off",
   m249: "M249", negev: "Negev", glock: "Glock", usp_silencer: "USP-S", hkp2000: "P2000", p250: "P250", fiveseven: "Five-SeveN",
-  tec9: "Tec-9", cz75a: "CZ75", deagle: "Deagle", revolver: "R8", elite: "Dualies", taser: "Zeus", c4: "C4",
-  // Item names follow the in-game English HUD and kill feed
-  smokegrenade: "Smoke", flashbang: "Flashbang", hegrenade: "HE Grenade", molotov: "Molotov", incendiary: "Incendiary", decoy: "Decoy",
-  inferno: "Fire", planted_c4: "C4", world: "World",
+  tec9: "Tec-9", cz75a: "CZ75", deagle: "Deagle", revolver: "R8", elite: "Dualies", taser: "Zeus", c4: "C4", planted_c4: "C4",
 };
-export const weaponName = (w: string | null | undefined) =>
-  !w ? "" : w.startsWith("knife") || w === "bayonet" ? "Knife" : WEAPON_NAMES[w] ?? w;
+// Generic item/event names (not gun models): localized through i18n.
+const ITEM_NAME_KEYS: Record<string, Key> = {
+  smokegrenade: "wn.smoke", flashbang: "wn.flash", hegrenade: "wn.he", molotov: "wn.molotov",
+  incendiary: "wn.incendiary", decoy: "wn.decoy", inferno: "wn.fire", world: "replay.world",
+};
+export const weaponName = (w: string | null | undefined): string => {
+  if (!w) return "";
+  if (w.startsWith("knife") || w === "bayonet") return t("ps.knife");
+  const key = ITEM_NAME_KEYS[w];
+  return key ? t(key) : WEAPON_NAMES[w] ?? w;
+};
 const blindCache = new WeakMap<ReplayKill, boolean>();
 /** Was the killer blinded by a flash when the kill happened (computed once per kill). */
 export function attackerBlind(r: Replay, k: ReplayKill): boolean {

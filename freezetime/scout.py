@@ -17,6 +17,7 @@ import numpy as np
 import polars as pl
 
 from freezetime.context import Match, load_match, pct, round_context, with_round
+from freezetime.replay import actual_damage
 from freezetime.tactics import SiteZoner, tactics, userid_map, utility_events
 
 LOW_SAMPLE = 5  # fewer rounds than this: the conclusion is marked as thin
@@ -126,8 +127,9 @@ def _player_rounds(m: Match, pos: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFr
     by_vic = kills.group_by("round_num", steamid="victim_steamid").agg(
         deaths=pl.len(), traded_deaths=pl.col("victim_traded").sum(), opening_deaths=pl.col("opening").sum())
     dmg = (
-        with_round(m.data["damages"].filter(pl.col("attacker_side") != pl.col("victim_side")), m.rounds)
-        .group_by("round_num", steamid="attacker_steamid").agg(damage=pl.col("dmg_health").sum())
+        actual_damage(with_round(m.data["damages"], m.rounds), ("round_num",))
+        .filter(pl.col("attacker_side") != pl.col("victim_side"))
+        .group_by("round_num", steamid="attacker_steamid").agg(damage=pl.col("dmg").sum())
     )
     base = pos.group_by("round_num", "steamid").agg(pl.col("name").last(), pl.col("team").first(), pl.col("side").first())
     counters = ["kills", "trade_kills", "opening_kills", "headshots", "deaths", "traded_deaths", "opening_deaths", "damage"]

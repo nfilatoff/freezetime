@@ -10,8 +10,9 @@ missing or older than package.json / package-lock.json, and `npm run build` when
 missing or any frontend source is newer than freezetime/app/static/index.html.
 
 The script never stops the app from starting: it always exits with code 0. When a build fails, the
-previous build is restored and a warning is printed. Without a frontend/ folder (not a source
-checkout) it does nothing.
+previous build is restored and a warning is printed. When the previous build cannot be backed up
+(its folder is locked, e.g. by a running app), the rebuild is skipped and the existing build is kept
+as is. Without a frontend/ folder (not a source checkout) it does nothing.
 
 .EXAMPLE
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensure-frontend.ps1
@@ -155,7 +156,13 @@ try {
             Rename-Item -LiteralPath $static -NewName 'static.prev'
             $movedAside = $true
         }
-        catch { Write-Verbose "could not move the previous build aside: $($_.Exception.Message)" }
+        catch {
+            # The build folder is in use (e.g. a file locked by the running app) and cannot be moved
+            # aside: without a backup, a failing vite step would leave the app with no static files
+            # at all. Skip the rebuild this time and keep serving the existing build.
+            Write-Warn "The web app build folder is in use and could not be backed up: skipping the rebuild, keeping the current build. $($_.Exception.Message)"
+            exit 0
+        }
     }
 
     # Whatever happens from here on (a failed build or an exception), the finally block puts the
